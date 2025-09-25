@@ -1,0 +1,49 @@
+# OS / Editor junk
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*.tmp
+*.log
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+env/
+venv/
+
+# Node.js
+node_modules/
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Ansible
+*.retry
+
+# Docker
+*.pid
+*.seed
+*.pid.lock
+
+# CI/CD
+# (Jenkins, GitLab, etc.)
+secrets.*
+*.crt
+*.key
+
+# Misc
+.env
+.env.*
+*.pem

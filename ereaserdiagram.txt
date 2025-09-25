@@ -1,0 +1,103 @@
+title AWS pipeline cloud
+direction right
+
+Main_VPC [label: "Main_VPC (10.0.0.0/16)"] {
+
+  Public Route Table [icon: aws-route-table, label: "Public RT"]
+  Private Route Table [icon: aws-route-table, label: "Private RT"]
+
+  InternetGateway [label: "Internet Gateway", icon: aws-internet-gateway]
+  ALB [label: "MyALB, SG: SG_ALB", icon: aws-alb]
+
+  // ── AZ eu-central-1a
+  "AZ eu-central-1a" {
+    "Public subnet 10.0.1.0/24" {
+      NAT_Instance [label: "NAT Instance, SG: SG-NAT", icon: aws-ec2]
+      Bastion [label: "Bastion Host, SG: SG-BASTION-HOST", icon: aws-ec2]
+    }
+
+    "Private subnet 10.0.2.0/24" {
+      JenkinsServer [label: "Jenkins Server, SG: SG-JENKINS-SRV", icon: jenkins]
+      JenkinsAgent  [label: "Jenkins Agent, SG: SG-JENKINS-AGT", icon: jenkins]
+      GitLab        [label: "GitLab, SG: SG-GITLAB", icon: gitlab]
+      Prometheus    [label: "Prometheus, SG: SG-PROM", icon: prometheus]
+
+      // EKS node group (private)
+      EKS_NG_A [label: "EKS Node Group (eu-central-1a)\nSG: SG-EKS-NODES\nASG/Managed Nodes", icon: aws-eks-node]
+    }
+  }
+
+  // ── AZ eu-central-1b
+  "AZ eu-central-1b" {
+    "Public subnet 10.0.3.0/24" { }
+    "Private subnet 10.0.4.0/24" {
+      // EKS node group (private)
+      EKS_NG_B [label: "EKS Node Group (eu-central-1b)\nSG: SG-EKS-NODES\nASG/Managed Nodes", icon: aws-eks-node]
+    }
+  }
+
+  // EKS Control Plane (managed by AWS; ENIs in private subnets)
+  EKS_Cluster [label: "EKS Cluster (control plane)\nSG: SG-EKS-CLUSTER", icon: aws-eks]
+}
+
+// ── Security Groups (with inline notes) ──
+SG_BASTION  [label: "SG-BASTION-HOST", icon: aws-security-group]
+SG_ALB      [label: "SG-ALB", icon: aws-security-group]
+SG_JENKSRV  [label: "SG-JENKINS-SRV", icon: aws-security-group]
+SG_JENKAGT  [label: "SG-JENKINS-AGT", icon: aws-security-group]
+SG_GITLAB   [label: "SG-GITLAB", icon: aws-security-group]
+SG_PROM     [label: "SG-PROM", icon: aws-security-group]
+SG_NAT      [label: "SG-NAT", icon: aws-security-group]
+SG_EKS_CL   [label: "SG-EKS-CLUSTER", icon: aws-security-group]
+SG_EKS_ND   [label: "SG-EKS-NODES", icon: aws-security-group]
+
+// SG rules (MyApp SG removed)
+SG_BASTION // Inbound: SSH (22) from admin IP; Outbound: all
+SG_ALB     // Inbound: HTTP/80, HTTPS/443 from 0.0.0.0/0; Outbound: NodePort 30080 to SG-EKS-NODES
+SG_JENKSRV // Inbound: 22 (SG-BASTION), 50000 (SG-JENKINS-AGT), 8080/443 (SG-GITLAB)
+SG_JENKAGT // Inbound: 22 (SG-BASTION); Outbound: 443 (DockerHub)
+SG_GITLAB  // Inbound: 22,2222,8080,443 (SG-BASTION, SG-JENKINS)
+SG_PROM    // Inbound: 22,3000,9090 (admin IPs); Outbound: scrape SG-EKS-NODES (as needed)
+SG_NAT     // Inbound: all from private CIDRs; Outbound: all
+
+// EKS specifics
+SG_EKS_CL  // Outbound: 10250 to SG-EKS-NODES (kubelet); Inbound: managed by EKS
+SG_EKS_ND  // Inbound: 10250 from SG-EKS-CLUSTER; Inbound: 30080 (NodePort) from SG-ALB; Inbound: 22 from SG-BASTION (optional); Outbound: all (via NAT)
+
+// ── Connectivity (simplified with SG context) ──
+"Public subnet 10.0.1.0/24" > InternetGateway
+"Public subnet 10.0.3.0/24" > InternetGateway
+"Private subnet 10.0.2.0/24" > NAT_Instance
+"Private subnet 10.0.4.0/24" > NAT_Instance
+
+"Public subnet 10.0.1.0/24" > Public Route Table
+"Public subnet 10.0.3.0/24" > Public Route Table
+"Private subnet 10.0.2.0/24" > Private Route Table
+"Private subnet 10.0.4.0/24" > Private Route Table
+
+// ALB to EKS via NodePort (example NodePort 30080)
+ALB > EKS_NG_A: "HTTP NodePort 30080"
+ALB > EKS_NG_B: "HTTP NodePort 30080"
+
+// Control plane ↔ Nodes
+EKS_Cluster > EKS_NG_A: "10250 (kubelet)"
+EKS_Cluster > EKS_NG_B: "10250 (kubelet)"
+
+// Bastion & Observability
+Bastion > "Private subnet 10.0.2.0/24": "SSH 22" [color: Orange]
+Prometheus > EKS_NG_A: "Scrape"
+Prometheus > EKS_NG_B: "Scrape"
+
+// Pipeline (now targets the cluster, not EC2)
+JenkinsServer <-> JenkinsAgent: Build Commands [color: green]
+GitLab > JenkinsServer: Webhook [color: green]
+JenkinsAgent < GitLab: Checkout [color: green]
+JenkinsAgent > EKS_Cluster: "kubectl apply / helm" [color: green]
+
+// External
+DockerHub [label: "DockerHub", icon: docker]
+Slack [label: "Slack", icon: slack]
+EKS_NG_A < DockerHub: "Pull via NAT"
+EKS_NG_B < DockerHub: "Pull via NAT"
+JenkinsAgent > DockerHub: "Push"
+JenkinsServer > Slack: "Notifications"

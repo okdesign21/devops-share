@@ -287,6 +287,8 @@ module "eks" {
   name               = var.project_name
   vpc_id             = module.vpc.vpc_id
   private_subnet_ids = module.vpc.private_subnet_ids
+  #create_kms_key     = ture
+  #cluster_encryption_config = []
 }
 
 output "alb_dns" { value = module.alb.alb_dns_name }

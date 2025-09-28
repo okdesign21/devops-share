@@ -63,16 +63,6 @@ variable "node_labels" {
   default     = { role = "general" }
 }
 
-variable "node_taints" {
-  description = "Taints for the managed node group"
-  type = list(object({
-    key    = string
-    value  = optional(string)
-    effect = string # NO_SCHEDULE, PREFER_NO_SCHEDULE, NO_EXECUTE
-  }))
-  default = []
-}
-
 # Additional IAM policies to attach to the node role
 variable "node_iam_additional_policies" {
   description = "Map of name=>policy ARN to attach to node IAM role"

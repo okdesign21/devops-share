@@ -32,3 +32,18 @@ variable "key_name" {
   type        = string
   default     = null
 }
+
+variable "ubuntu_ami" {
+  description = "SSM parameter name or AMI id to use for Ubuntu images (provided via common.tfvars)"
+  type        = string
+}
+
+variable "state_bucket" {
+  description = "S3 bucket for remote state (provided via common.tfvars)"
+  type        = string
+}
+
+variable "state_prefix" {
+  description = "Prefix/path inside the S3 bucket for remote state (provided via common.tfvars)"
+  type        = string
+}

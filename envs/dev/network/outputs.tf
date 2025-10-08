@@ -15,5 +15,15 @@ output "nat_instance_id" {
 }
 
 output "sg_nat_id" {
-  value = try(module.sg.sg_nat, null)
+  value = try(aws_security_group.nat.id, null)
 }
+
+output "key_name" {
+  value = try(local.effective_key_name, null)
+}
+
+output "ssm_instance_profile_name" {
+  value = try(aws_iam_instance_profile.ssm.name, null)
+}
+
+

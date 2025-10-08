@@ -1,22 +1,25 @@
-REGION ?= eu-central-1
-PROJECT ?= infdev
-BACKEND := ../../../backend.hcl
+#REGION ?= eu-central-1
+#PROJECT ?= infdev
+STATE_PREFIX ?= inf-devops
+BACKEND := ../../backend.hcl
 ENV ?= dev
 
 .PHONY: init plan apply destroy
 
 init:
 	cd envs/$(ENV)/$(STACK) && \
-	terraform init -backend-config=$(BACKEND) -backend-config="key=$(ENV)/$(STACK)/terraform.tfstate" -reconfigure
+	terraform init -var-file=../../common.tfvars \
+	  -backend-config=$(BACKEND) \
+	  -backend-config="key=$(STATE_PREFIX)/$(ENV)/$(STACK)/terraform.tfstate" -reconfigure
 
 plan:
 	cd envs/$(ENV)/$(STACK) && \
-	terraform plan -var="project_name=$(PROJECT)" -var="region=$(REGION)"
+	terraform plan -var-file=../../common.tfvars
 
 apply:
 	cd envs/$(ENV)/$(STACK) && \
-	terraform apply -auto-approve -var="project_name=$(PROJECT)" -var="region=$(REGION)"
+	terraform apply -var-file=../../common.tfvars -auto-approve
 
 destroy:
 	cd envs/$(ENV)/$(STACK) && \
-	terraform destroy -auto-approve -var="project_name=$(PROJECT)" -var="region=$(REGION)"
+	terraform destroy -var-file=../../common.tfvars -auto-approve

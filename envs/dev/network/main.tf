@@ -1,6 +1,5 @@
-# AMI: Ubuntu 24.04 LTS
 data "aws_ssm_parameter" "ubuntu_24" {
-  name = "/aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id"
+  name = var.ubuntu_ami
 }
 
 # SSM role & instance profile for Session Manager
@@ -35,16 +34,27 @@ module "vpc" {
   private_cidrs = local.private_cidrs
 }
 
-module "sg" {
-  source                   = "../../../modules/sg"
-  vpc_id                   = module.vpc.vpc_id
-  allowed_nat_ingress_cidr = local.vpc_cidr
+resource "aws_security_group" "nat" {
+  name   = "${var.project_name}-nat-sg"
+  vpc_id = module.vpc.vpc_id
+  ingress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = [local.vpc_cidr]
+  }
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
 }
 
 locals {
   availability_zones = ["${var.region}a", "${var.region}b"]
-  vpc_cidr            = format("%d.10.0.0/16", var.cidr_base)
-  public_cidrs        = [
+  vpc_cidr           = format("%d.10.0.0/16", var.cidr_base)
+  public_cidrs = [
     format("%d.10.1.0/24", var.cidr_base),
     format("%d.10.2.0/24", var.cidr_base),
   ]
@@ -81,7 +91,7 @@ module "nat_instance" {
   name                     = "${var.project_name}-nat"
   ami_id                   = data.aws_ssm_parameter.ubuntu_24.value
   subnet_id                = module.vpc.public_subnet_ids[0]
-  sg_ids                   = [module.sg.sg_nat]
+  sg_ids                   = [aws_security_group.nat.id]
   key_name                 = var.key_name
   instance_type            = var.nat_instance_type
   associate_public_ip      = true

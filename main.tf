@@ -160,16 +160,17 @@ module "alb" {
   vpc_id            = module.vpc.vpc_id
   subnets           = module.vpc.public_subnet_ids
   security_group_id = module.sg.sg_alb
+  default_tg_name   = var.app_count > 0 ? "app" : null
   routes = concat(
     var.app_count > 0 ? [
-      { name = "app", path = "/", port = 8000, health_path = "/" }
+      { name = "app", path = "/", port = 8000, health_path = "/", priority = 5 }
     ] : [],
     [
-      { name = "jenkins", path = "/jenkins*", port = 8080, health_path = "/jenkins/login" },
-      { name = "gitlab", path = "/gitlab*", port = 8080, health_path = "/gitlab/users/sign_in" }
+      { name = "jenkins", path = "/jenkins*", port = 8080, health_path = "/jenkins/login", priority = 10 },
+      { name = "gitlab", path = "/gitlab*", port = 8080, health_path = "/gitlab/users/sign_in", priority = 15 }
     ],
     var.enable_prometheus ? [
-      { name = "prometheus", path = "/prom*", port = 9090, health_path = "/-/healthy" }
+      { name = "prometheus", path = "/prom*", port = 9090, health_path = "/-/healthy", priority = 30 }
     ] : []
   )
 }

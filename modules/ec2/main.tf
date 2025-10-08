@@ -6,6 +6,7 @@ resource "aws_instance" "this" {
   vpc_security_group_ids      = var.sg_ids
   associate_public_ip_address = var.associate_public_ip
   user_data                   = var.user_data
+  user_data_replace_on_change = true
   source_dest_check           = var.enable_source_dest_check
   iam_instance_profile        = var.iam_instance_profile
 

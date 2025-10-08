@@ -14,13 +14,18 @@ variable "security_group_id" {
   type = string
 }
 
+variable "default_tg_name" {
+  type    = string
+  default = null
+}
+
 variable "routes" {
-  description = "Path-based routes to backend ports"
   type = list(object({
     name        = string
     path        = string
     port        = number
     health_path = string
+    priority    = number
   }))
 }
 

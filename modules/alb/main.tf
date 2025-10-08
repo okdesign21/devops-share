@@ -1,3 +1,9 @@
+locals {
+  routes_by_name   = { for r in var.routes : r.name => r }
+  route_names      = keys(local.routes_by_name)
+  computed_default = coalesce(var.default_tg_name, try(local.route_names[0], null))
+}
+
 resource "aws_lb" "this" {
   name               = "${var.name}-alb"
   internal           = false
@@ -10,13 +16,11 @@ resource "aws_lb_listener" "http" {
   load_balancer_arn = aws_lb.this.arn
   port              = 80
   protocol          = "HTTP"
+  count             = local.computed_default != null ? 1 : 0
+
   default_action {
-    type = "fixed-response"
-    fixed_response {
-      content_type = "text/plain"
-      message_body = "Not Found"
-      status_code  = "404"
-    }
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.tgs[local.computed_default].arn
   }
 }
 
@@ -33,16 +37,34 @@ resource "aws_lb_target_group" "tgs" {
 }
 
 resource "aws_lb_listener_rule" "rules" {
-  for_each     = aws_lb_target_group.tgs
-  listener_arn = aws_lb_listener.http.arn
-  priority     = 10 + index(keys(aws_lb_target_group.tgs), each.key)
+  for_each     = local.computed_default != null ? local.routes_by_name : {}
+  listener_arn = aws_lb_listener.http[0].arn
+  priority     = each.value.priority
+
   action {
     type             = "forward"
-    target_group_arn = each.value.arn
+    target_group_arn = aws_lb_target_group.tgs[each.key].arn
   }
+
   condition {
     path_pattern {
-      values = [var.routes[index(keys(aws_lb_target_group.tgs), each.key)].path]
+      values = [each.value.path]
+    }
+  }
+}
+
+resource "aws_lb_listener" "http_404" {
+  count             = local.computed_default == null ? 1 : 0
+  load_balancer_arn = aws_lb.this.arn
+  port              = 80
+  protocol          = "HTTP"
+
+  default_action {
+    type = "fixed-response"
+    fixed_response {
+      content_type = "text/plain"
+      message_body = "Not Found"
+      status_code  = "404"
     }
   }
 }

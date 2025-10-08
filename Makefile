@@ -1,6 +1,6 @@
 REGION ?= eu-central-1
 PROJECT ?= infdev
-BACKEND := backend.hcl
+BACKEND := ../../../backend.hcl
 ENV ?= dev
 
 .PHONY: init plan apply destroy

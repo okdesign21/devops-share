@@ -10,6 +10,10 @@ output "private_subnet_ids" {
   value = module.vpc.private_subnet_ids
 }
 
-output "alb_arn"        { value = module.alb.arn }
-output "alb_dns_name"   { value = module.alb.dns_name }
-output "base_sg_ids"    { value = module.sg.ids }
+output "nat_instance_id" {
+  value = try(module.nat_instance.id, null)
+}
+
+output "sg_nat_id" {
+  value = try(module.sg.sg_nat, null)
+}

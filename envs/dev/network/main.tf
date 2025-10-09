@@ -80,8 +80,8 @@ locals {
 module "ud_nat" {
   source = "../../../modules/userdata"
   scripts = [
-    "../../../modules/userdata/common/ssm.sh",
-    "../../../modules/userdata/common/nat.sh",
+    "${path.module}/../../../modules/userdata/common/ssm.sh",
+    "${path.module}/../../../modules/userdata/common/nat.sh",
   ]
   inline_snippets = [local.nat_vars]
 }

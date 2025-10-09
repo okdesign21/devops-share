@@ -5,7 +5,7 @@ cat > /opt/app/docker-compose.yml <<'YML'
 version: "3.8"
 services:
   app:
-    image: okdesign21/weather_app:current
+    image: okdesign21/weather_app:latest
     ports:
       - "8000:8000"
     restart: unless-stopped

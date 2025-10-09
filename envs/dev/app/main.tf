@@ -21,10 +21,10 @@ locals {
 module "ud_app" {
   source = "../../../modules/userdata"
   scripts = [
-    "../../../modules/userdata/common/swap.sh",
-    "../../../modules/userdata/common/docker.sh",
-    "../../../modules/userdata/common/ssm.sh",
-    "../../../modules/userdata/compose/app.sh"
+    "${path.module}/../../../modules/userdata/common/swap.sh",
+    "${path.module}/../../../modules/userdata/common/ssm.sh",
+    "${path.module}/../../../modules/userdata/common/docker.sh",
+    "${path.module}/../../../modules/userdata/compose/app.sh",
   ]
 }
 

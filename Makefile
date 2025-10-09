@@ -1,25 +1,38 @@
-#REGION ?= eu-central-1
-#PROJECT ?= infdev
 STATE_PREFIX ?= inf-devops
 BACKEND := ../../backend.hcl
 ENV ?= dev
+STACK ?= all
+# default ordered list of stacks
+STACKS ?= network cicd app
+
+# computed lists: if STACK=all use STACKS, otherwise use single STACK
+STACK_LIST := $(if $(filter all,$(STACK)),$(STACKS),$(STACK))
+REVERSE_STACKS := $(if $(filter all,$(STACK)),$(shell echo $(STACKS) | awk '{for(i=NF;i>=1;i--) printf "%s ", $$i}'),$(STACK))
 
 .PHONY: init plan apply destroy
 
 init:
-	cd envs/$(ENV)/$(STACK) && \
-	terraform init -var-file=../../common.tfvars \
-	  -backend-config=$(BACKEND) \
-	  -backend-config="key=$(STATE_PREFIX)/$(ENV)/$(STACK)/terraform.tfstate" -reconfigure
+    @for s in $(STACK_LIST); do \
+      echo "== terraform init $$s =="; \
+      cd envs/$(ENV)/$$s && terraform init -var-file=../../common.tfvars \
+        -backend-config=$(BACKEND) \
+        -backend-config="key=$(STATE_PREFIX)/$(ENV)/$$s/terraform.tfstate" -reconfigure || exit 1; \
+    done
 
 plan:
-	cd envs/$(ENV)/$(STACK) && \
-	terraform plan -var-file=../../common.tfvars
+    @for s in $(STACK_LIST); do \
+      echo "== terraform plan $$s =="; \
+      cd envs/$(ENV)/$$s && terraform plan -var-file=../../common.tfvars || exit 1; \
+    done
 
 apply:
-	cd envs/$(ENV)/$(STACK) && \
-	terraform apply -var-file=../../common.tfvars -auto-approve
+    @for s in $(STACK_LIST); do \
+      echo "== terraform apply $$s =="; \
+      cd envs/$(ENV)/$$s && terraform apply -var-file=../../common.tfvars -auto-approve || exit 1; \
+    done
 
 destroy:
-	cd envs/$(ENV)/$(STACK) && \
-	terraform destroy -var-file=../../common.tfvars -auto-approve
+    @for s in $(REVERSE_STACKS); do \
+      echo "== terraform destroy $$s =="; \
+      cd envs/$(ENV)/$$s && terraform destroy -var-file=../../common.tfvars -auto-approve || exit 1; \
+    done

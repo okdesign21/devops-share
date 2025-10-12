@@ -2,7 +2,6 @@ STATE_PREFIX ?= inf-devops
 BACKEND := ../../backend.hcl
 ENV ?= dev
 STACK ?= all
-# default ordered list of stacks
 STACKS ?= network cicd app
 
 # computed lists: if STACK=all use STACKS, otherwise use single STACK

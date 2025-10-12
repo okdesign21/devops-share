@@ -192,7 +192,7 @@ module "jenkins_server" {
   sg_ids               = [aws_security_group.sg_jenkins_srv.id]
   key_name             = data.terraform_remote_state.network.outputs.key_name
   instance_type        = var.jenkins_server_instance_type
-  root_volume_size_gb = var.jenkins_server_volume_size_gb
+  root_volume_size_gb  = var.jenkins_server_volume_size_gb
   associate_public_ip  = false
   iam_instance_profile = null
   depends_on           = [null_resource.require_amis]
@@ -206,7 +206,7 @@ module "gitlab" {
   sg_ids               = [aws_security_group.sg_gitlab.id]
   key_name             = data.terraform_remote_state.network.outputs.key_name
   instance_type        = var.gitlab_server_instance_type
-  root_volume_size_gb = var.gitlab_volume_size_gb
+  root_volume_size_gb  = var.gitlab_volume_size_gb
   associate_public_ip  = false
   user_data            = ""
   iam_instance_profile = null

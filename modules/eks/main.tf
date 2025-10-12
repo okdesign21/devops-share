@@ -1,51 +1,42 @@
 locals {
-  cluster_name = "${var.name}-eks"
+  name = var.cluster_name
 }
 
-module "eks_core" {
-  source             = "terraform-aws-modules/eks/aws"
-  version            = "21.3.1"
-  name               = local.cluster_name
-  kubernetes_version = var.cluster_version
+module "eks" {
+  source  = "terraform-aws-modules/eks/aws"
+  version = "~> 20.0"
 
-  vpc_id                   = var.vpc_id
-  subnet_ids               = var.private_subnet_ids
-  control_plane_subnet_ids = var.private_subnet_ids
+  cluster_name    = local.name
+  cluster_version = var.cluster_version
 
-  endpoint_private_access = true
-  endpoint_public_access  = false
+  vpc_id     = var.vpc_id
+  subnet_ids = var.private_subnet_ids
 
-  enable_irsa                              = true
   enable_cluster_creator_admin_permissions = true
 
-  create_security_group      = true
-  create_node_security_group = true
-  create_kms_key             = true
-  #cluster_encryption_config  = []
-
-  addons = {
-    coredns    = {}
-    kube-proxy = {}
-    vpc-cni    = { before_compute = true }
+  # Core addons (managed by AWS)
+  cluster_addons = {
+    coredns    = { most_recent = true }
+    kube-proxy = { most_recent = true }
+    vpc-cni    = { most_recent = true }
   }
 
+  # One default managed node group across private subnets
   eks_managed_node_groups = {
     default = {
-      name           = "${local.cluster_name}-mng"
-      instance_types = [var.node_instance_type]
-      desired_size   = var.node_desired_size
-      min_size       = var.node_min_size
-      max_size       = var.node_max_size
-      capacity_type  = var.node_capacity_type
-      subnet_ids     = var.private_subnet_ids
-
-      create_iam_role = var.node_iam_role_arn == null ? true : false
-      iam_role_arn    = var.node_iam_role_arn
-
-      iam_role_additional_policies = var.node_iam_additional_policies
-      labels                       = var.node_labels
+      ami_type               = "AL2_x86_64"
+      instance_types         = var.node_instance_types
+      min_size               = var.min_size
+      max_size               = var.max_size
+      desired_size           = var.desired_size
+      subnet_ids             = var.private_subnet_ids
+      capacity_type          = "ON_DEMAND"
+      disk_size              = var.node_disk_size
+      create_launch_template = true
+      launch_template_tags   = var.tags
+      tags                   = var.tags
     }
   }
 
-  tags = merge({ Project = var.name, Stack = "eks" }, var.tags)
+  tags = var.tags
 }

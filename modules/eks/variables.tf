@@ -1,81 +1,56 @@
-variable "name" {
-  description = "Base name/prefix (e.g., project_name)"
+variable "cluster_name" {
+  description = "EKS cluster name"
   type        = string
-}
-
-variable "vpc_id" {
-  description = "VPC ID where the cluster will live"
-  type        = string
-}
-
-variable "private_subnet_ids" {
-  description = "Private subnet IDs for control plane and nodes"
-  type        = list(string)
 }
 
 variable "cluster_version" {
-  description = "EKS version (e.g., 1.33)."
+  description = "Kubernetes version"
   type        = string
   default     = "1.33"
 }
 
-# Node group variables
-variable "node_instance_type" {
-  description = "EC2 instance type for worker nodes"
+variable "vpc_id" {
+  description = "VPC ID"
   type        = string
-  default     = "t3.small"
 }
 
-variable "node_desired_size" {
-  description = "Desired number of worker nodes"
+variable "private_subnet_ids" {
+  description = "Private subnet IDs for EKS"
+  type        = list(string)
+}
+
+variable "desired_size" {
+  description = "Desired node count"
   type        = number
   default     = 2
 }
 
-variable "node_min_size" {
-  description = "Minimum number of worker nodes"
+variable "min_size" {
+  description = "Min node count"
   type        = number
   default     = 2
 }
 
-variable "node_max_size" {
-  description = "Maximum number of worker nodes"
+variable "max_size" {
+  description = "Max node count"
   type        = number
   default     = 4
 }
 
-variable "node_capacity_type" {
-  description = "Capacity type for worker nodes (ON_DEMAND or SPOT)"
-  type        = string
-  default     = "ON_DEMAND"
+variable "node_instance_types" {
+  description = "Instance types for managed node group"
+  type        = list(string)
+  default     = ["m7i-flex.large"]
 }
 
 variable "tags" {
-  description = "Common tags to apply"
+  description = "Common tags"
   type        = map(string)
   default     = {}
 }
 
-# Node labels / taints as variables
-variable "node_labels" {
-  description = "Labels applied to the managed node group"
-  type        = map(string)
-  default     = { role = "general" }
-}
-
-# Additional IAM policies to attach to the node role
-variable "node_iam_additional_policies" {
-  description = "Map of name=>policy ARN to attach to node IAM role"
-  type        = map(string)
-  default = {
-    ssm = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
-  }
-}
-
-# Use an existing IAM role for the node group (prevents recreation)
-# If provided, Terraform will NOT create a role and will use this ARN.
-variable "node_iam_role_arn" {
-  description = "Existing IAM role ARN for the managed node group (optional)"
-  type        = string
-  default     = null
+variable "node_disk_size" {
+  description = "EKS node disk size in GB"
+  type        = number
+  default     = 20
 }

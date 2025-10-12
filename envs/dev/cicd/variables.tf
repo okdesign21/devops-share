@@ -72,3 +72,9 @@ variable "ubuntu_ami" {
   type        = string
   default     = ""
 }
+
+variable "ami_owner_ids" {
+  description = "List of owner account IDs to filter AMI lookups (empty = no owner filter)."
+  type        = list(string)
+  default     = []
+}

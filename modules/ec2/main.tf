@@ -1,6 +1,12 @@
-# read AMI info so we can determine snapshot root size (if any)
+# If an AMI id was provided, look it up so we can inspect its block device mappings.
+# Use count to avoid evaluating this data source when ami_id is empty.
 data "aws_ami" "this" {
-  id = var.ami_id
+  count       = var.ami_id != "" ? 1 : 0
+  most_recent = true
+  filter {
+    name   = "image-id"
+    values = [var.ami_id]
+  }
 }
 
 data "aws_subnet" "this" {
@@ -8,16 +14,13 @@ data "aws_subnet" "this" {
 }
 
 locals {
-  ami_root_device_type = try(data.aws_ami.this.root_device_type, "")
-  ami_root_device_name = try(data.aws_ami.this.root_device_name, "/dev/sda1")
-  ami_root_size = try(
-    lookup({ for m in data.aws_ami.this.block_device_mappings : m.device_name => m }, local.ami_root_device_name).ebs.volume_size,
-    try(data.aws_ami.this.block_device_mappings[0].ebs.volume_size, 0)
-  )
-
-  requested_root_size = var.root_volume_size_gb
-  # For EBS-backed AMIs ensure not smaller than AMI snapshot size.
-  effective_root_size = local.requested_root_size == 0 ? 0 : (local.ami_root_device_type == "ebs" ? max(local.requested_root_size, local.ami_root_size) : local.requested_root_size)
+  ami_present          = length(data.aws_ami.this) > 0
+  ami_root_device_type = local.ami_present ? try(data.aws_ami.this[0].root_device_type, "ebs") : "ebs"
+  ami_root_device_name = local.ami_present ? try(data.aws_ami.this[0].root_device_name, "/dev/sda1") : "/dev/sda1"
+  ami_block_mappings   = local.ami_present ? tolist(data.aws_ami.this[0].block_device_mappings) : []
+  ami_root_size        = length(local.ami_block_mappings) > 0 ? try(local.ami_block_mappings[0].ebs.volume_size, 0) : 0
+  requested_root_size  = var.root_volume_size_gb
+  effective_root_size  = local.requested_root_size == 0 ? 0 : (local.ami_root_device_type == "ebs" ? max(local.requested_root_size, local.ami_root_size) : local.requested_root_size)
 }
 
 # Fail if instance-store AMI and user didn't request override (per your rule)
@@ -59,7 +62,6 @@ resource "aws_instance" "this" {
       (local.ami_root_device_type != "ebs" && local.requested_root_size > 0 && var.root_snapshot_id != "")
     ) ? [1] : []
     content {
-      device_name           = local.ami_root_device_name
       volume_type           = var.root_volume_type
       delete_on_termination = true
       volume_size           = local.effective_root_size > 0 ? local.effective_root_size : local.requested_root_size
@@ -79,9 +81,9 @@ resource "aws_ebs_volume" "data" {
 }
 
 resource "aws_volume_attachment" "data_attach" {
-  count       = var.create_data_volume ? 1 : 0
-  device_name = var.data_device_name
-  volume_id   = aws_ebs_volume.data[0].id
-  instance_id = aws_instance.this.id
+  count        = var.create_data_volume ? 1 : 0
+  device_name  = var.data_device_name
+  volume_id    = aws_ebs_volume.data[0].id
+  instance_id  = aws_instance.this.id
   force_detach = true
 }

@@ -25,10 +25,13 @@ module "ud_jenkins_agent" {
 data "aws_ami" "jenkins_lookup" {
   count       = var.jenkins_server_ami == "" ? 1 : 0
   most_recent = true
+  owners      = length(var.ami_owner_ids) > 0 ? var.ami_owner_ids : null
+
   filter {
     name   = "tag:type"
     values = ["jenkins"]
   }
+
   filter {
     name   = "state"
     values = ["available"]
@@ -38,19 +41,41 @@ data "aws_ami" "jenkins_lookup" {
 data "aws_ami" "gitlab_lookup" {
   count       = var.gitlab_ami == "" ? 1 : 0
   most_recent = true
+  owners      = length(var.ami_owner_ids) > 0 ? var.ami_owner_ids : null
+
   filter {
     name   = "tag:type"
     values = ["gitlab"]
   }
+
   filter {
     name   = "state"
     values = ["available"]
   }
 }
 
+# If user provided an explicit AMI id, look it up safely (count = 0 when empty)
+data "aws_ami" "gitlab_ami" {
+  count       = var.gitlab_ami != "" ? 1 : 0
+  most_recent = true
+  filter {
+    name   = "image-id"
+    values = [var.gitlab_ami]
+  }
+}
+
+data "aws_ami" "jenkins_server_ami" {
+  count       = var.jenkins_server_ami != "" ? 1 : 0
+  most_recent = true
+  filter {
+    name   = "image-id"
+    values = [var.jenkins_server_ami]
+  }
+}
+
 locals {
-  jenkins_server_ami_resolved = var.jenkins_server_ami != "" ? var.jenkins_server_ami : (length(data.aws_ami.jenkins_lookup) > 0 ? data.aws_ami.jenkins_lookup[0].id : "")
-  gitlab_ami_resolved         = var.gitlab_ami != "" ? var.gitlab_ami : (length(data.aws_ami.gitlab_lookup) > 0 ? data.aws_ami.gitlab_lookup[0].id : "")
+  gitlab_ami_resolved         = var.gitlab_ami != "" ? var.gitlab_ami : (length(data.aws_ami.gitlab_ami) > 0 ? data.aws_ami.gitlab_ami[0].id : "")
+  jenkins_server_ami_resolved = var.jenkins_server_ami != "" ? var.jenkins_server_ami : (length(data.aws_ami.jenkins_server_ami) > 0 ? data.aws_ami.jenkins_server_ami[0].id : "")
   inst_subnets                = tolist(data.terraform_remote_state.network.outputs.private_subnet_ids)
   vpc_id                      = data.terraform_remote_state.network.outputs.vpc_id
   ssm_profile                 = data.terraform_remote_state.network.outputs.ssm_instance_profile_name
@@ -148,14 +173,6 @@ module "alb" {
       { name = "gitlab", path = "/gitlab*", port = 8080, health_path = "/gitlab/users/sign_in", priority = 20 }
     ]
   )
-}
-
-data "aws_ami" "gitlab_ami" {
-  id = var.gitlab_ami
-}
-
-data "aws_ami" "jenkins_server_ami" {
-  id = var.jenkins_server_ami
 }
 
 module "jenkins_server" {

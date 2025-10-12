@@ -70,6 +70,12 @@ variable "root_volume_type" {
   default     = "gp3"
 }
 
+variable "ami_root_device_type" {
+  description = "Root device type of the AMI (ebs/instance-store)."
+  type        = string
+  default     = "ebs"
+}
+
 variable "enable_source_dest_check" {
   type    = bool
   default = true

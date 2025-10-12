@@ -54,12 +54,12 @@ variable "jenkins_agent_volume_size_gb" {
 
 variable "jenkins_server_volume_size_gb" {
   type    = number
-  default = 0
+  default = 8
 }
 
 variable "gitlab_volume_size_gb" {
   type    = number
-  default = 0
+  default = 20
 }
 
 variable "jenkins_agent_count" {

@@ -70,6 +70,10 @@ data "aws_ami" "jenkins_server_ami" {
   }
 }
 
+data "cloudflare_zones" "this" {
+  filter { name = var.zone_name }
+}
+
 locals {
   gitlab_ami_resolved = var.gitlab_ami != "" ? var.gitlab_ami : (
     length(data.aws_ami.gitlab_ami) > 0 ? data.aws_ami.gitlab_ami[0].id : (
@@ -83,9 +87,14 @@ locals {
   )
 
   jenkins_agent_ami_resolved = length(data.aws_ssm_parameter.ubuntu_24) > 0 ? data.aws_ssm_parameter.ubuntu_24[0].value : ""
-  inst_subnets               = tolist(data.terraform_remote_state.network.outputs.private_subnet_ids)
+  inst_subnets               = tolist(data.terraform_remote_state.network.outputs.public_subnet_ids)
   vpc_id                     = data.terraform_remote_state.network.outputs.vpc_id
   ssm_profile                = data.terraform_remote_state.network.outputs.ssm_instance_profile_name
+  zone_id                    = one(data.cloudflare_zones.this.zones).id
+  base_domain                = var.subdomain != "" ? "${var.subdomain}.${var.zone_name}" : var.zone_name
+  wildcard_domain            = "*.${local.base_domain}"
+  jenkins_header             = var.subdomain != "" ? format("jenkins-dev.%s", var.subdomain) : "jenkins-dev"
+  gitlab_header              = var.subdomain != "" ? format("gitlab-dev.%s" , var.subdomain) : "gitlab-dev"
 }
 
 # fail early if any required AMI is unresolved
@@ -178,8 +187,8 @@ module "alb" {
 
   routes = concat(
     [
-      { name = "jenkins", path = "/jenkins*", port = 8080, health_path = "/jenkins/login", priority = 10 },
-      { name = "gitlab", path = "/gitlab*", port = 8080, health_path = "/gitlab/users/sign_in", priority = 20 }
+      { name = "jenkins", header = local.jenkins_header, port = 8080, health_path = "/jenkins/login", priority = 10 },
+      { name = "gitlab", header = local.gitlab_header, port = 8080, health_path = "/gitlab/users/sign_in", priority = 20 }
     ]
   )
 }
@@ -246,3 +255,48 @@ data "aws_ssm_parameter" "ubuntu_24" {
   count = var.ubuntu_ami != "" ? 1 : 0
   name  = var.ubuntu_ami
 }
+
+# Dev records (CNAME → ALB DNS). Set proxied=false while testing.
+resource "cloudflare_record" "jenkins" {
+  zone_id = local.zone_id
+  name    = local.jenkins_header
+  type    = "CNAME"
+  value   = module.alb.alb_dns_name
+  proxied = false
+}
+
+resource "cloudflare_record" "gitlab" {
+  zone_id = local.zone_id
+  name    = local.gitlab_header
+  type    = "CNAME"
+  value   = module.alb.alb_dns_name
+  proxied = false
+}
+
+resource "aws_acm_certificate" "apps" {
+  domain_name               = local.wildcard_domain
+  validation_method         = "DNS"
+  subject_alternative_names = [local.base_domain]
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+/*
+resource "cloudflare_record" "acm_validations" {
+  for_each = {
+    for dvo in aws_acm_certificate.apps.domain_validation_options :
+    dvo.domain_name => {
+      name  = dvo.resource_record_name
+      type  = dvo.resource_record_type
+      value = dvo.resource_record_value
+    }
+  }
+
+  zone_id = local.zone_id
+  name    = each.value.name
+  type    = each.value.type
+  value   = each.value.value
+  ttl     = 60
+  proxied = false
+}*/

@@ -10,6 +10,7 @@ resource "aws_lb" "this" {
   load_balancer_type = "application"
   security_groups    = [var.security_group_id]
   subnets            = var.subnets
+  lifecycle { prevent_destroy = false }
 }
 
 resource "aws_lb_listener" "http" {
@@ -47,8 +48,8 @@ resource "aws_lb_listener_rule" "rules" {
   }
 
   condition {
-    path_pattern {
-      values = [each.value.path]
+    host_header {
+      values = [each.value.header]
     }
   }
 }

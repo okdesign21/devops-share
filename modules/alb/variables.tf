@@ -22,7 +22,7 @@ variable "default_tg_name" {
 variable "routes" {
   type = list(object({
     name        = string
-    path        = string
+    header     = string
     port        = number
     health_path = string
     priority    = number

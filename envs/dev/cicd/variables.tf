@@ -78,3 +78,20 @@ variable "ami_owner_ids" {
   type        = list(string)
   default     = []
 }
+
+variable "zone_name" {
+  description = "Base DNS zone"
+  type        = string
+}
+
+variable "subdomain" {
+  description = "Optional subdomain"
+  type        = string
+  default     = "infinity"
+}
+
+variable "cloudflare_api_token" {
+  description = "Cloudflare API token with DNS edit permissions"
+  type        = string
+  default     = ""
+}

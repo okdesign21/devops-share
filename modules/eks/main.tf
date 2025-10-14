@@ -9,9 +9,11 @@ module "eks" {
   cluster_name    = local.name
   cluster_version = var.cluster_version
 
-  vpc_id     = var.vpc_id
-  subnet_ids = var.private_subnet_ids
-
+  vpc_id                                   = var.vpc_id
+  subnet_ids                               = var.private_subnet_ids
+  cluster_endpoint_private_access          = var.endpoint_private_access
+  cluster_endpoint_public_access_cidrs     = var.public_access_cidrs
+  cluster_endpoint_public_access           = var.endpoint_public_access
   enable_cluster_creator_admin_permissions = true
 
   # Core addons (managed by AWS)
@@ -24,7 +26,7 @@ module "eks" {
   # One default managed node group across private subnets
   eks_managed_node_groups = {
     default = {
-      ami_type               = "AL2_x86_64"
+      ami_type               = "BOTTLEROCKET_x86_64"
       instance_types         = var.node_instance_types
       min_size               = var.min_size
       max_size               = var.max_size

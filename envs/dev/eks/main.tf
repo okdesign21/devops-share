@@ -20,12 +20,14 @@ module "eks" {
   vpc_id             = local.vpc_id
   private_subnet_ids = local.private_subnet_ids
 
-  desired_size        = var.desired_size
-  min_size            = var.min_size
-  max_size            = var.max_size
-  node_instance_types = var.node_instance_types
-
-  tags = var.tags
+  desired_size            = var.desired_size
+  min_size                = var.min_size
+  max_size                = var.max_size
+  node_instance_types     = var.node_instance_types
+  endpoint_private_access = true
+  endpoint_public_access  = true
+  public_access_cidrs     = [var.home_ip, var.lab_ip]
+  tags                    = var.tags
 }
 
 # Wire Kubernetes & Helm providers to the new cluster
@@ -38,20 +40,21 @@ data "aws_eks_cluster_auth" "this" {
   name       = module.eks.cluster_name
   depends_on = [module.eks]
 }
-/*
+
 provider "kubernetes" {
   host                   = data.aws_eks_cluster.this.endpoint
-  cluster_ca_certificate = base64decode(data.aws_eks_cluster.this.certificate_authority[0].data)
   token                  = data.aws_eks_cluster_auth.this.token
+  cluster_ca_certificate = base64decode(data.aws_eks_cluster.this.certificate_authority[0].data)
 }
 
 provider "helm" {
-  kubernetes {
+  kubernetes = {
     host                   = data.aws_eks_cluster.this.endpoint
-    cluster_ca_certificate = base64decode(data.aws_eks_cluster.this.certificate_authority[0].data)
     token                  = data.aws_eks_cluster_auth.this.token
+    cluster_ca_certificate = base64decode(data.aws_eks_cluster.this.certificate_authority[0].data)
+    load_config_file       = false
   }
-}*/
+}
 
 # --- Argo CD install via Helm ---
 resource "kubernetes_namespace" "argocd" {

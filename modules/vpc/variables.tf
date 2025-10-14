@@ -17,3 +17,8 @@ variable "public_cidrs" {
 variable "private_cidrs" {
   type = list(string)
 }
+
+variable "endpoint_public_access" {
+  type    = bool
+  default = false
+}

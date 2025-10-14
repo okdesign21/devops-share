@@ -54,3 +54,21 @@ variable "node_disk_size" {
   type        = number
   default     = 20
 }
+
+variable "endpoint_private_access" {
+  description = "Whether to enable private access to the EKS endpoint"
+  type        = bool
+  default     = false
+}
+
+variable "public_access_cidrs" {
+  description = "List of CIDR blocks for public access to the EKS cluster"
+  type        = list(string)
+  default     = []
+}
+
+variable "endpoint_public_access" {
+  description = "Whether to enable public access to the EKS endpoint"
+  type        = bool
+  default     = false
+}

@@ -64,3 +64,13 @@ variable "state_prefix" {
   type        = string
   default     = ""
 }
+
+variable "home_ip" {
+  description = "CIDR block for home IP to allow public access to EKS API"
+  type        = string
+}
+
+variable "lab_ip" {
+  description = "CIDR block for lab IP to allow public access to EKS API"
+  type        = string
+}

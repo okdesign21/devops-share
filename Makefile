@@ -2,7 +2,7 @@ STATE_PREFIX ?= inf-devops
 BACKEND := ../../backend.hcl
 ENV ?= dev
 STACK ?= all
-STACKS ?= network cicd eks monitoring
+STACKS ?= network cicd eks #monitoring
 
 # computed lists: if STACK=all use STACKS, otherwise use single STACK
 STACK_LIST := $(if $(filter all,$(STACK)),$(STACKS),$(STACK))

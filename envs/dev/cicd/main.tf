@@ -194,7 +194,7 @@ module "jenkins_server" {
   instance_type        = var.jenkins_server_instance_type
   root_volume_size_gb  = var.jenkins_server_volume_size_gb
   associate_public_ip  = false
-  iam_instance_profile = null
+  iam_instance_profile = local.ssm_profile
   depends_on           = [null_resource.require_amis]
 }
 
@@ -209,7 +209,7 @@ module "gitlab" {
   root_volume_size_gb  = var.gitlab_volume_size_gb
   associate_public_ip  = false
   user_data            = ""
-  iam_instance_profile = null
+  iam_instance_profile = local.ssm_profile
   depends_on           = [null_resource.require_amis]
 }
 
@@ -225,7 +225,7 @@ module "jenkins_agent" {
   root_volume_size_gb  = var.jenkins_agent_volume_size_gb
   associate_public_ip  = false
   user_data            = module.ud_jenkins_agent.content
-  iam_instance_profile = data.terraform_remote_state.network.outputs.ssm_instance_profile_name
+  iam_instance_profile = local.ssm_profile
   depends_on           = [null_resource.require_amis]
 }
 

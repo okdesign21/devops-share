@@ -1,0 +1,9 @@
+1. create helmfile and argo apps of apps - 
+2. fix gitlab compose - export vars (url, trusted ips)
+2.5 - re create AMI
+3. connect to secret manager - Infisical Cloud?
+4. test pipline
+5. change pipline to eks
+6. jenkins x?
+7. prometues and monitoring
+8. manager cluster???

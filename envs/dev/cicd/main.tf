@@ -94,7 +94,17 @@ locals {
   base_domain                = var.subdomain != "" ? "${var.subdomain}.${var.zone_name}" : var.zone_name
   wildcard_domain            = "*.${local.base_domain}"
   jenkins_header             = var.subdomain != "" ? format("jenkins-dev.%s", var.subdomain) : "jenkins-dev"
-  gitlab_header              = var.subdomain != "" ? format("gitlab-dev.%s" , var.subdomain) : "gitlab-dev"
+  gitlab_header              = var.subdomain != "" ? format("gitlab-dev.%s", var.subdomain) : "gitlab-dev"
+
+  gitlab_trusted_cidrs = (
+    contains(keys(data.terraform_remote_state.network.outputs), "private_subnet_cidrs") && length(data.terraform_remote_state.network.outputs.private_subnet_cidrs) > 0 ?
+    join(",", data.terraform_remote_state.network.outputs.private_subnet_cidrs) :
+    ""
+  )
+
+  gitlab_trusted_array = (
+    local.gitlab_trusted_cidrs != "" ? format("['%s']", join("','", split(",", local.gitlab_trusted_cidrs))) : "[]"
+  )
 }
 
 # fail early if any required AMI is unresolved
@@ -205,19 +215,32 @@ module "jenkins_server" {
   associate_public_ip  = false
   iam_instance_profile = local.ssm_profile
   depends_on           = [null_resource.require_amis]
+
+  user_data = templatefile("../../../modules/user_data/templates/jenkins_env.tpl", {
+    public_hostname = "${local.jenkins_header}.${local.base_domain}"
+    jenkins_url     = "http://${local.jenkins_header}.${local.base_domain}/"
+    gitlab_url      = "http://${local.gitlab_header}.${local.base_domain}"
+    agent_override  = "${local.jenkins_header}.${local.base_domain}"
+  })
 }
 
 module "gitlab" {
-  source               = "../../../modules/ec2"
-  name                 = "${var.project_name}-gitlab-server"
-  ami_id               = local.gitlab_ami_resolved
-  subnet_id            = element(data.terraform_remote_state.network.outputs.private_subnet_ids, 1 % length(data.terraform_remote_state.network.outputs.private_subnet_ids))
-  sg_ids               = [aws_security_group.sg_gitlab.id]
-  key_name             = data.terraform_remote_state.network.outputs.key_name
-  instance_type        = var.gitlab_server_instance_type
-  root_volume_size_gb  = var.gitlab_volume_size_gb
-  associate_public_ip  = false
-  user_data            = ""
+  source              = "../../../modules/ec2"
+  name                = "${var.project_name}-gitlab-server"
+  ami_id              = local.gitlab_ami_resolved
+  subnet_id           = element(data.terraform_remote_state.network.outputs.private_subnet_ids, 1 % length(data.terraform_remote_state.network.outputs.private_subnet_ids))
+  sg_ids              = [aws_security_group.sg_gitlab.id]
+  key_name            = data.terraform_remote_state.network.outputs.key_name
+  instance_type       = var.gitlab_server_instance_type
+  root_volume_size_gb = var.gitlab_volume_size_gb
+  associate_public_ip = false
+
+  user_data = templatefile("../../../modules/user_data/templates/gitlab_env.tpl", {
+    external_url  = "http://${local.gitlab_header}.${local.base_domain}"
+    trusted_cidrs = local.gitlab_trusted_cidrs
+    trusted_array = local.gitlab_trusted_array
+  })
+
   iam_instance_profile = local.ssm_profile
   depends_on           = [null_resource.require_amis]
 }

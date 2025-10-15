@@ -95,3 +95,12 @@ resource "helm_release" "argo_cd" {
 
   depends_on = [module.eks]
 }
+
+/*# add cname record in cloudflare for app (weather app)
+resource "cloudflare_record" "weather_app" {
+  zone_id = data.cloudflare_zones.this.zones[0].id
+  name     = "weather"
+  value    = module.eks.cluster_endpoint
+  type     = "CNAME"
+  ttl      = 300
+}*/

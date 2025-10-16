@@ -104,3 +104,25 @@ resource "cloudflare_record" "weather_app" {
   type     = "CNAME"
   ttl      = 300
 }*/
+
+resource "null_resource" "update_kubeconfig" {
+  triggers = {
+    cluster = module.eks.cluster_name
+    region  = var.region
+  }
+
+  depends_on = [module.eks]
+
+  provisioner "local-exec" {
+    command = "aws eks update-kubeconfig --name ${self.triggers.cluster} --region ${self.triggers.region}"
+  }
+
+  provisioner "local-exec" {
+    when    = destroy
+    command = <<EOT
+kubectl config delete-context ${self.triggers.cluster} || true
+kubectl config delete-cluster ${self.triggers.cluster} || true
+kubectl config unset users.${self.triggers.cluster}-aws || true
+EOT
+  }
+}

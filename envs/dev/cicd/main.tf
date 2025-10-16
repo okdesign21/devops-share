@@ -216,7 +216,7 @@ module "jenkins_server" {
   iam_instance_profile = local.ssm_profile
   depends_on           = [null_resource.require_amis]
 
-  user_data = templatefile("../../../modules/user_data/templates/jenkins_env.tpl", {
+  user_data = templatefile("../../../modules/userdata/templates/jenkins_env.tpl", {
     public_hostname = "${local.jenkins_header}.${local.base_domain}"
     jenkins_url     = "http://${local.jenkins_header}.${local.base_domain}/"
     gitlab_url      = "http://${local.gitlab_header}.${local.base_domain}"
@@ -235,7 +235,7 @@ module "gitlab" {
   root_volume_size_gb = var.gitlab_volume_size_gb
   associate_public_ip = false
 
-  user_data = templatefile("../../../modules/user_data/templates/gitlab_env.tpl", {
+  user_data = templatefile("../../../modules/userdata/templates/gitlab_env.tpl", {
     external_url  = "http://${local.gitlab_header}.${local.base_domain}"
     trusted_cidrs = local.gitlab_trusted_cidrs
     trusted_array = local.gitlab_trusted_array

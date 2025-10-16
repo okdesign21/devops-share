@@ -33,3 +33,15 @@ output "jenkins_ami_used" {
 output "gitlab_ami_used" {
   value = local.gitlab_ami_resolved
 }
+
+output "gitlab_url" {
+  value = local.gitlab_url
+}
+
+output "jenkins_url" {
+  value = local.jenkins_url
+}
+
+output "zone_id" {
+  value = local.zone_id
+}

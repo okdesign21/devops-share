@@ -7,9 +7,19 @@ data "terraform_remote_state" "network" {
   }
 }
 
+data "terraform_remote_state" "cicd" {
+  backend = "s3"
+  config = {
+    bucket = var.state_bucket
+    key    = "${var.state_prefix}/dev/cicd/terraform.tfstate"
+    region = var.region
+  }
+}
+
 locals {
   vpc_id             = data.terraform_remote_state.network.outputs.vpc_id
   private_subnet_ids = data.terraform_remote_state.network.outputs.private_subnet_ids
+  zone_id            = data.terraform_remote_state.cicd.outputs.zone_id
 }
 
 module "eks" {
@@ -96,14 +106,33 @@ resource "helm_release" "argo_cd" {
   depends_on = [module.eks]
 }
 
-/*# add cname record in cloudflare for app (weather app)
+data "aws_ssm_parameter" "argo_key" {
+  name = "/cicd/argo_gitlab_private_key"
+}
+
+resource "kubernetes_secret" "argocd_gitlab_repo" {
+  metadata {
+    name      = "gitlab-argo-repo"
+    namespace = "argocd"
+    labels    = { "argocd.argoproj.io/secret-type" = "repository" }
+  }
+
+  data = {
+    url           = var.gitlab_argo_repo
+    sshPrivateKey = data.aws_ssm_parameter.argo_key.value
+  }
+
+  depends_on = [kubernetes_namespace.argocd]
+}
+
+# add cname record in cloudflare for app (weather app)
 resource "cloudflare_record" "weather_app" {
-  zone_id = data.cloudflare_zones.this.zones[0].id
-  name     = "weather"
-  value    = module.eks.cluster_endpoint
-  type     = "CNAME"
-  ttl      = 300
-}*/
+  zone_id = local.zone_id
+  name    = "dev-weather.${var.base_domain}"
+  value   = module.eks.cluster_endpoint
+  type    = "CNAME"
+  ttl     = 300
+}
 
 resource "null_resource" "update_kubeconfig" {
   triggers = {

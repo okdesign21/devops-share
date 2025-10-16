@@ -3,24 +3,42 @@ set -euxo pipefail
 
 mkdir -p /opt/jenkins
 cat > /opt/jenkins/docker-compose.yml <<'YML'
-version: "3.8"
 services:
   jenkins:
     image: jenkins/jenkins:lts
     container_name: jenkins
-    user: root
+    restart: unless-stopped
+    shm_size: "512m"
+    user: "1000:1000"
     ports:
       - "8080:8080"
       - "50000:50000"
-    environment:
-      - JAVA_OPTS=-Djenkins.model.Jenkins.crumbIssuerProxyCompatibility=true
-      - GITLAB_URL=http://${ALB_DNS}/gitlab	
-      - JENKINS_OPTS=--prefix=/jenkins
     volumes:
-      - jenkins_home:/var/jenkins_home
-    restart: always
-volumes:
-  jenkins_home:
+      - /opt/jenkins/data:/var/jenkins_home
+      - /opt/jenkins/config/init.groovy.d:/usr/share/jenkins/ref/init.groovy.d:ro
+      - /opt/jenkins/config/casc:/var/jenkins_home/casc:ro
+      - /home/ubuntu/.ssh:/var/jenkins_home/.ssh:ro
+      - /opt/jenkins/logs:/var/log/jenkins
+    env_file:
+      - /opt/jenkins/.env
+    environment:
+      JAVA_OPTS: >
+        -Djenkins.model.Jenkins.crumbIssuerProxyCompatibility=true
+        -Dsun.net.http.allowRestrictedHeaders=true
+        ${AGENT_HOSTNAME_OVERRIDE:+-Dhudson.TcpSlaveAgentListener.hostName=${AGENT_HOSTNAME_OVERRIDE}}
+      JENKINS_OPTS: >-
+        --httpPort=8080
+      CASC_JENKINS_CONFIG: /var/jenkins_home/casc/jenkins.yaml
+    healthcheck:
+      test: ["CMD", "bash", "-c", "curl -fsS http://localhost:8080/login > /dev/null"]
+      interval: 30s
+      timeout: 5s
+      retries: 10
+    logging:
+      driver: "local"
+      options:
+        max-size: "10m"
+        max-file: "3"
 YML
 cd /opt/jenkins && /usr/local/bin/docker-compose up -d
 

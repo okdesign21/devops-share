@@ -13,7 +13,7 @@ module "ud_jenkins_agent" {
     "${path.module}/../../../modules/userdata/common/swap.sh",
     "${path.module}/../../../modules/userdata/common/ssm.sh",
     "${path.module}/../../../modules/userdata/common/docker.sh",
-    "${path.module}/../../../modules/userdata/compose/jenkins_agent.sh",
+    "${path.module}/../../../modules/userdata/compose/jenkins_agent.sh"
   ]
 }
 
@@ -86,15 +86,14 @@ locals {
     (length(data.aws_ami.jenkins_lookup) > 0 ? data.aws_ami.jenkins_lookup[0].id : "")
   )
 
-  jenkins_agent_ami_resolved = length(data.aws_ssm_parameter.ubuntu_24) > 0 ? data.aws_ssm_parameter.ubuntu_24[0].value : ""
-  inst_subnets               = tolist(data.terraform_remote_state.network.outputs.public_subnet_ids)
-  vpc_id                     = data.terraform_remote_state.network.outputs.vpc_id
-  ssm_profile                = data.terraform_remote_state.network.outputs.ssm_instance_profile_name
-  zone_id                    = one(data.cloudflare_zones.this.zones).id
-  base_domain                = var.subdomain != "" ? "${var.subdomain}.${var.zone_name}" : var.zone_name
-  wildcard_domain            = "*.${local.base_domain}"
-  jenkins_header             = var.subdomain != "" ? format("jenkins-dev.%s", var.subdomain) : "jenkins-dev"
-  gitlab_header              = var.subdomain != "" ? format("gitlab-dev.%s", var.subdomain) : "gitlab-dev"
+  env_prefix  = var.env_prefix != "" ? var.env_prefix : "dev"
+  base_domain = var.subdomain != "" ? "${var.subdomain}.${var.zone_name}" : var.zone_name
+
+  gitlab_host  = var.gitlab_host != "" ? var.gitlab_host : "${local.env_prefix}-gitlab.${local.base_domain}"
+  jenkins_host = var.jenkins_host != "" ? var.jenkins_host : "${local.env_prefix}-jenkins.${local.base_domain}"
+
+  gitlab_url  = "${var.gitlab_protocol}://${local.gitlab_host}"
+  jenkins_url = "${var.jenkins_protocol}://${local.jenkins_host}"
 
   gitlab_trusted_cidrs = (
     contains(keys(data.terraform_remote_state.network.outputs), "private_subnet_cidrs") && length(data.terraform_remote_state.network.outputs.private_subnet_cidrs) > 0 ?
@@ -105,14 +104,19 @@ locals {
   gitlab_trusted_array = (
     local.gitlab_trusted_cidrs != "" ? format("['%s']", join("','", split(",", local.gitlab_trusted_cidrs))) : "[]"
   )
+
+  inst_subnets = tolist(data.terraform_remote_state.network.outputs.public_subnet_ids)
+  vpc_id       = data.terraform_remote_state.network.outputs.vpc_id
+  ssm_profile  = data.terraform_remote_state.network.outputs.ssm_instance_profile_name
+  zone_id      = one(data.cloudflare_zones.this.zones).id
 }
 
 # fail early if any required AMI is unresolved
 resource "null_resource" "require_amis" {
-  count = (local.jenkins_server_ami_resolved == "" || local.gitlab_ami_resolved == "" || local.jenkins_agent_ami_resolved == "") ? 1 : 0
+  count = (local.jenkins_server_ami_resolved == "" || local.gitlab_ami_resolved == "") ? 1 : 0
 
   provisioner "local-exec" {
-    command = "echo 'ERROR: unresolved AMIs -> jenkins_server=${local.jenkins_server_ami_resolved} gitlab=${local.gitlab_ami_resolved} jenkins_agent=${local.jenkins_agent_ami_resolved}'; exit 1"
+    command = "echo 'ERROR: unresolved AMIs -> jenkins_server=${local.jenkins_server_ami_resolved} gitlab=${local.gitlab_ami_resolved}'; exit 1"
   }
 }
 
@@ -190,17 +194,30 @@ resource "aws_security_group" "sg_jenkins_agt" {
 
 module "alb" {
   source            = "../../../modules/alb"
-  name              = "${var.project_name}-cicd-alb"
+  name              = "${var.project_name}-dev"
   vpc_id            = local.vpc_id
   subnets           = local.inst_subnets
   security_group_id = aws_security_group.sg_alb.id
 
   routes = concat(
     [
-      { name = "jenkins", header = local.jenkins_header, port = 8080, health_path = "/jenkins/login", priority = 10 },
-      { name = "gitlab", header = local.gitlab_header, port = 8080, health_path = "/gitlab/users/sign_in", priority = 20 }
+      { name = "jenkins", header = local.jenkins_host, port = var.jenkins_port, health_path = "/-/login", priority = 10 },
+      { name = "gitlab", header = local.gitlab_host, port = var.gitlab_port, health_path = "/gitlab/users/sign_in", priority = 20 }
     ]
   )
+}
+
+module "ud_jenkins_server" {
+  source = "../../../modules/userdata"
+  scripts = [
+    "${path.module}/../../../modules/userdata/compose/jenkins_server.sh",
+    templatefile("../../../modules/userdata/templates/jenkins_env.tpl", {
+      public_hostname = local.jenkins_host
+      jenkins_url     = local.jenkins_url
+      gitlab_url      = local.gitlab_url
+      agent_override  = local.jenkins_host
+    })
+  ]
 }
 
 module "jenkins_server" {
@@ -216,13 +233,22 @@ module "jenkins_server" {
   iam_instance_profile = local.ssm_profile
   depends_on           = [null_resource.require_amis]
 
-  user_data = templatefile("../../../modules/userdata/templates/jenkins_env.tpl", {
-    public_hostname = "${local.jenkins_header}.${local.base_domain}"
-    jenkins_url     = "http://${local.jenkins_header}.${local.base_domain}/"
-    gitlab_url      = "http://${local.gitlab_header}.${local.base_domain}"
-    agent_override  = "${local.jenkins_header}.${local.base_domain}"
-  })
+  user_data = module.ud_jenkins_server.content
 }
+
+
+module "ud_gitlab" {
+  source = "../../../modules/userdata"
+  scripts = [
+    "${path.module}/../../../modules/userdata/compose/gitlab.sh",
+    templatefile("../../../modules/userdata/templates/gitlab_env.tpl", {
+      external_url  = local.gitlab_url
+      trusted_cidrs = local.gitlab_trusted_cidrs
+      trusted_array = local.gitlab_trusted_array
+    })
+  ]
+}
+
 
 module "gitlab" {
   source              = "../../../modules/ec2"
@@ -235,11 +261,7 @@ module "gitlab" {
   root_volume_size_gb = var.gitlab_volume_size_gb
   associate_public_ip = false
 
-  user_data = templatefile("../../../modules/userdata/templates/gitlab_env.tpl", {
-    external_url  = "http://${local.gitlab_header}.${local.base_domain}"
-    trusted_cidrs = local.gitlab_trusted_cidrs
-    trusted_array = local.gitlab_trusted_array
-  })
+  user_data = module.ud_gitlab.content
 
   iam_instance_profile = local.ssm_profile
   depends_on           = [null_resource.require_amis]
@@ -249,7 +271,7 @@ module "jenkins_agent" {
   source               = "../../../modules/ec2"
   for_each             = { for i in range(var.jenkins_agent_count) : i => i }
   name                 = "${var.project_name}-jenkins-agent-${each.key}"
-  ami_id               = local.jenkins_agent_ami_resolved
+  ami_id               = data.aws_ssm_parameter.ubuntu_24.value
   subnet_id            = element(data.terraform_remote_state.network.outputs.private_subnet_ids, each.key % length(data.terraform_remote_state.network.outputs.private_subnet_ids))
   sg_ids               = [aws_security_group.sg_jenkins_agt.id]
   key_name             = data.terraform_remote_state.network.outputs.key_name
@@ -273,16 +295,13 @@ resource "aws_lb_target_group_attachment" "gitlab" {
   port             = 8080
 }
 
-# Jenkins agent Ubuntu SSM (used when ubuntu_ami var is set to an SSM param name)
 data "aws_ssm_parameter" "ubuntu_24" {
-  count = var.ubuntu_ami != "" ? 1 : 0
-  name  = var.ubuntu_ami
+  name = var.ubuntu_ami
 }
 
-# Dev records (CNAME → ALB DNS). Set proxied=false while testing.
 resource "cloudflare_record" "jenkins" {
   zone_id = local.zone_id
-  name    = local.jenkins_header
+  name    = local.jenkins_host
   type    = "CNAME"
   value   = module.alb.alb_dns_name
   proxied = false
@@ -290,14 +309,14 @@ resource "cloudflare_record" "jenkins" {
 
 resource "cloudflare_record" "gitlab" {
   zone_id = local.zone_id
-  name    = local.gitlab_header
+  name    = local.gitlab_host
   type    = "CNAME"
   value   = module.alb.alb_dns_name
   proxied = false
 }
 
 resource "aws_acm_certificate" "apps" {
-  domain_name               = local.wildcard_domain
+  domain_name               = "*.${local.base_domain}"
   validation_method         = "DNS"
   subject_alternative_names = [local.base_domain]
 

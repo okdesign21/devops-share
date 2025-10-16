@@ -74,3 +74,21 @@ variable "lab_ip" {
   description = "CIDR block for lab IP to allow public access to EKS API"
   type        = string
 }
+
+variable "gitlab_argo_repo" {
+  description = "GitLab repository for Argo CD"
+  type        = string
+  default     = ""
+}
+
+variable "cloudflare_api_token" {
+  description = "Cloudflare API token with DNS edit permissions"
+  type        = string
+  default     = ""
+}
+
+variable "base_domain" {
+  description = "base domain"
+  default     = ""
+  type        = string
+}

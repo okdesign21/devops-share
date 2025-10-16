@@ -26,4 +26,6 @@ output "ssm_instance_profile_name" {
   value = try(aws_iam_instance_profile.ssm.name, null)
 }
 
-
+output "private_subnet_cidrs" {
+  value = try(local.private_cidrs, null)
+}

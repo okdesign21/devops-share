@@ -79,29 +79,6 @@ variable "ami_owner_ids" {
   default     = []
 }
 
-variable "zone_name" {
-  description = "Base DNS zone"
-  type        = string
-}
-
-variable "subdomain" {
-  description = "Optional subdomain"
-  type        = string
-  default     = ""
-}
-
-variable "cloudflare_api_token" {
-  description = "Cloudflare API token with DNS edit permissions"
-  type        = string
-  default     = ""
-}
-
-variable "env_prefix" {
-  type        = string
-  default     = "dev"
-  description = "Short environment prefix used to construct service hostnames (e.g. 'dev' -> dev-gitlab.example.com)."
-}
-
 variable "gitlab_host" {
   type        = string
   default     = ""
@@ -132,4 +109,12 @@ variable "gitlab_port" {
 variable "jenkins_port" {
   type    = number
   default = 8080
+}
+
+variable "base_domain" {
+  type = string
+}
+
+variable "env" {
+  type = string
 }

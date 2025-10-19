@@ -41,7 +41,3 @@ output "gitlab_url" {
 output "jenkins_url" {
   value = local.jenkins_url
 }
-
-output "zone_id" {
-  value = local.zone_id
-}

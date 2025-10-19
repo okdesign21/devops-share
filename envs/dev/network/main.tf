@@ -25,6 +25,37 @@ resource "aws_iam_instance_profile" "ssm" {
   role = aws_iam_role.ssm_ec2.name
 }
 
+locals {
+cidr_base = lookup({
+    dev  = 10
+    prod = 20
+  }, var.env, 30)  # 30 is default for any other env
+
+  availability_zones = ["${var.region}a", "${var.region}b"]
+  vpc_cidr           = format("%d.10.0.0/16", local.cidr_base)
+  public_cidrs = [
+    format("%d.10.1.0/24", local.cidr_base),
+    format("%d.10.2.0/24", local.cidr_base),
+  ]
+  private_cidrs = [
+    format("%d.10.11.0/24", local.cidr_base),
+    format("%d.10.12.0/24", local.cidr_base),
+  ]
+
+  vpc_vars = <<-EOT
+    #!/usr/bin/env bash
+    export VPC_ID="${module.vpc.vpc_id}"
+    export SUBNET_PUBLIC_A="${local.public_cidrs[0]}"
+    export SUBNET_PUBLIC_B="${local.public_cidrs[1]}"
+    export VPC_CIDR="${local.vpc_cidr}"
+  EOT
+
+  nat_vars = <<-EOT
+    #!/usr/bin/env bash
+    export PRIVATE_CIDRS="${local.vpc_cidr}" 
+  EOT
+}
+
 module "vpc" {
   source        = "../../../modules/vpc"
   name          = var.project_name
@@ -49,32 +80,6 @@ resource "aws_security_group" "nat" {
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
-}
-
-locals {
-  availability_zones = ["${var.region}a", "${var.region}b"]
-  vpc_cidr           = format("%d.10.0.0/16", var.cidr_base)
-  public_cidrs = [
-    format("%d.10.1.0/24", var.cidr_base),
-    format("%d.10.2.0/24", var.cidr_base),
-  ]
-  private_cidrs = [
-    format("%d.10.11.0/24", var.cidr_base),
-    format("%d.10.12.0/24", var.cidr_base),
-  ]
-
-  vpc_vars = <<-EOT
-    #!/usr/bin/env bash
-    export VPC_ID="${module.vpc.vpc_id}"
-    export SUBNET_PUBLIC_A="${local.public_cidrs[0]}"
-    export SUBNET_PUBLIC_B="${local.public_cidrs[1]}"
-    export VPC_CIDR="${local.vpc_cidr}"
-  EOT
-
-  nat_vars = <<-EOT
-    #!/usr/bin/env bash
-    export PRIVATE_CIDRS="${local.vpc_cidr}" 
-  EOT
 }
 
 module "ud_nat" {

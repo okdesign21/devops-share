@@ -11,7 +11,11 @@ resource "aws_internet_gateway" "igw" {
 }
 
 resource "aws_subnet" "public" {
-  for_each                = { for idx, cidr in var.public_cidrs : idx => { cidr = cidr, az = var.azs[idx] } }
+  for_each = { for idx, cidr in var.public_cidrs : idx => {
+    cidr = cidr
+    az   = var.azs[idx]
+  }}
+
   vpc_id                  = aws_vpc.this.id
   cidr_block              = each.value.cidr
   availability_zone       = each.value.az

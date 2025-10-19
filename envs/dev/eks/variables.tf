@@ -38,7 +38,7 @@ variable "node_instance_types" {
 # Helm chart versions (pin for reproducibility)
 variable "argocd_chart_version" {
   type    = string
-  default = "6.7.17"
+  default = "7.6.12"
 }
 
 variable "tags" {
@@ -91,4 +91,22 @@ variable "base_domain" {
   description = "base domain"
   default     = ""
   type        = string
+}
+
+variable "gitlab_argo_token" {
+  description = "GitLab personal access token for Argo CD repository access"
+  type        = string
+  default     = ""
+}
+
+variable "env" {
+  type        = string
+  description = "Environment name (dev, prod, etc.)"
+  default     = ""
+}
+
+variable "node_disk_size" {
+  description = "EKS node disk size in GB"
+  type        = number
+  default     = 20
 }

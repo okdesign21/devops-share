@@ -9,12 +9,6 @@ variable "region" {
   default     = "eu-central-1"
 }
 
-variable "cidr_base" {
-  description = "Base first octet identifying the environment"
-  type        = number
-  default     = 10
-}
-
 variable "nat_instance_type" {
   description = "EC2 instance type for NAT instance"
   type        = string
@@ -46,4 +40,8 @@ variable "state_bucket" {
 variable "state_prefix" {
   description = "Prefix/path inside the S3 bucket for remote state (provided via common.tfvars)"
   type        = string
+}
+
+variable "env" {
+  type = string
 }

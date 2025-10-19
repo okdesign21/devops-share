@@ -2,7 +2,7 @@ STATE_PREFIX ?= inf-devops
 BACKEND := ../../backend.hcl
 ENV ?= dev
 STACK ?= all
-STACKS ?= network cicd eks #monitoring
+STACKS ?= network cicd eks dns #monitoring
 
 # computed lists: if STACK=all use STACKS, otherwise use single STACK
 STACK_LIST := $(if $(filter all,$(STACK)),$(STACKS),$(STACK))
@@ -13,7 +13,7 @@ REVERSE_STACKS := $(if $(filter all,$(STACK)),$(shell echo $(STACKS) | awk '{for
 init:
 	@for s in $(STACK_LIST) ; do \
 		echo "== terraform init $$s ==" ; \
-		( cd envs/$(ENV)/$$s && terraform init -var-file=../../common.tfvars \
+		( cd envs/$(ENV)/$$s && terraform init -var-file=../../common.tfvars -upgrade \
 			-backend-config=$(BACKEND) \
 			-backend-config="key=$(STATE_PREFIX)/$(ENV)/$$s/terraform.tfstate" -reconfigure ) || exit 1; \
 	done

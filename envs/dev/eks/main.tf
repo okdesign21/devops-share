@@ -7,88 +7,179 @@ data "terraform_remote_state" "network" {
   }
 }
 
-data "terraform_remote_state" "cicd" {
-  backend = "s3"
-  config = {
-    bucket = var.state_bucket
-    key    = "${var.state_prefix}/dev/cicd/terraform.tfstate"
-    region = var.region
-  }
-}
-
 locals {
   vpc_id             = data.terraform_remote_state.network.outputs.vpc_id
   private_subnet_ids = data.terraform_remote_state.network.outputs.private_subnet_ids
-  zone_id            = data.terraform_remote_state.cicd.outputs.zone_id
+  cluster_name       = "${var.project_name}-${var.env}-cluster"
+  
+  tags = {
+    Environment = var.env
+    Project     = var.project_name
+    ManagedBy   = "Terraform"
+  }
 }
 
 module "eks" {
-  source = "../../../modules/eks"
+  source  = "terraform-aws-modules/eks/aws"
+  version = "~> 21.4"
 
-  cluster_name       = "${var.project_name}-dev-eks"
-  cluster_version    = var.cluster_version
-  vpc_id             = local.vpc_id
-  private_subnet_ids = local.private_subnet_ids
+  cluster_name    = local.cluster_name
+  cluster_version = var.cluster_version
 
-  desired_size            = var.desired_size
-  min_size                = var.min_size
-  max_size                = var.max_size
-  node_instance_types     = var.node_instance_types
-  endpoint_private_access = true
-  endpoint_public_access  = true
-  public_access_cidrs     = [var.home_ip, var.lab_ip]
-  tags                    = var.tags
-}
+  vpc_id     = local.vpc_id
+  subnet_ids = local.private_subnet_ids
 
-# Wire Kubernetes & Helm providers to the new cluster
-data "aws_eks_cluster" "this" {
-  name       = module.eks.cluster_name
-  depends_on = [module.eks]
-}
+  cluster_endpoint_public_access = true
 
-data "aws_eks_cluster_auth" "this" {
-  name       = module.eks.cluster_name
-  depends_on = [module.eks]
-}
+  enable_cluster_creator_admin_permissions = true
 
-provider "kubernetes" {
-  host                   = data.aws_eks_cluster.this.endpoint
-  token                  = data.aws_eks_cluster_auth.this.token
-  cluster_ca_certificate = base64decode(data.aws_eks_cluster.this.certificate_authority[0].data)
-}
-
-provider "helm" {
-  kubernetes = {
-    host                   = data.aws_eks_cluster.this.endpoint
-    token                  = data.aws_eks_cluster_auth.this.token
-    cluster_ca_certificate = base64decode(data.aws_eks_cluster.this.certificate_authority[0].data)
-    load_config_file       = false
+  cluster_addons = {
+    coredns = {
+      most_recent = true
+    }
+    kube-proxy = {
+      most_recent = true
+    }
+    vpc-cni = {
+      most_recent = true
+    }
   }
+
+  eks_managed_node_groups = {
+    main = {
+      min_size     = var.node_group_min_size
+      max_size     = var.node_group_max_size
+      desired_size = var.node_group_desired_size
+
+      instance_types = var.node_instance_types
+      capacity_type  = "ON_DEMAND"
+
+      labels = {
+        role = "general"
+      }
+
+      tags = local.tags
+    }
+  }
+
+  tags = local.tags
 }
 
-# --- Argo CD install via Helm ---
+# --- OIDC Provider for IRSA ---
+data "tls_certificate" "eks_oidc" {
+  url = module.eks.cluster_oidc_issuer_url
+}
+
+resource "aws_iam_openid_connect_provider" "eks" {
+  count = module.eks.oidc_provider_arn == "" ? 1 : 0
+
+  client_id_list  = ["sts.amazonaws.com"]
+  thumbprint_list = [data.tls_certificate.eks_oidc.certificates[0].sha1_fingerprint]
+  url             = module.eks.cluster_oidc_issuer_url
+
+  tags = local.tags
+}
+
+locals {
+  oidc_provider_arn = coalesce(
+    module.eks.oidc_provider_arn,
+    try(aws_iam_openid_connect_provider.eks[0].arn, "")
+  )
+}
+
+# --- AWS Load Balancer Controller ---
+resource "aws_iam_role" "alb_controller" {
+  name = "${local.cluster_name}-alb-controller"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Principal = {
+        Federated = local.oidc_provider_arn
+      }
+      Action = "sts:AssumeRoleWithWebIdentity"
+      Condition = {
+        StringEquals = {
+          "${replace(module.eks.cluster_oidc_issuer_url, "https://", "")}:sub" = "system:serviceaccount:kube-system:aws-load-balancer-controller"
+          "${replace(module.eks.cluster_oidc_issuer_url, "https://", "")}:aud" = "sts.amazonaws.com"
+        }
+      }
+    }]
+  })
+
+  tags = local.tags
+}
+
+resource "aws_iam_role_policy_attachment" "alb_controller" {
+  role       = aws_iam_role.alb_controller.name
+  policy_arn = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:policy/AWSLoadBalancerControllerIAMPolicy"
+}
+
+data "aws_caller_identity" "current" {}
+
+resource "helm_release" "aws_lb_controller" {
+  name       = "aws-load-balancer-controller"
+  repository = "https://aws.github.io/eks-charts"
+  chart      = "aws-load-balancer-controller"
+  namespace  = "kube-system"
+  version    = "1.8.1"
+
+  set {
+    name  = "clusterName"
+    value = module.eks.cluster_name
+  }
+
+  set {
+    name  = "serviceAccount.create"
+    value = "true"
+  }
+
+  set {
+    name  = "serviceAccount.name"
+    value = "aws-load-balancer-controller"
+  }
+
+  set {
+    name  = "serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn"
+    value = aws_iam_role.alb_controller.arn
+  }
+
+  depends_on = [module.eks]
+}
+
+# --- ArgoCD Installation ---
 resource "kubernetes_namespace" "argocd" {
   metadata {
     name = "argocd"
-    labels = {
-      "app.kubernetes.io/name" = "argocd"
-    }
   }
+
+  depends_on = [module.eks]
 }
 
 resource "helm_release" "argo_cd" {
-  name       = "argo-cd"
-  namespace  = kubernetes_namespace.argocd.metadata[0].name
+  name       = "argocd"
   repository = "https://argoproj.github.io/argo-helm"
   chart      = "argo-cd"
+  namespace  = kubernetes_namespace.argocd.metadata[0].name
   version    = var.argocd_chart_version
 
-  # Minimal sane defaults; tweak as you like
   values = [
     yamlencode({
       server = {
         service = {
-          type = "LoadBalancer"
+          type = "ClusterIP"
+        }
+        ingress = {
+          enabled = true
+          annotations = {
+            "kubernetes.io/ingress.class"               = "alb"
+            "alb.ingress.kubernetes.io/scheme"          = "internet-facing"
+            "alb.ingress.kubernetes.io/target-type"     = "ip"
+            "alb.ingress.kubernetes.io/listen-ports"    = jsonencode([{ HTTPS = 443 }])
+            "alb.ingress.kubernetes.io/ssl-redirect"    = "443"
+          }
+          hosts = ["argocd.${var.env}.${var.base_domain}"]
         }
       }
       configs = {
@@ -99,59 +190,35 @@ resource "helm_release" "argo_cd" {
     })
   ]
 
-  # Wait until all resources are ready
-  timeout = 600
-  wait    = true
-
-  depends_on = [module.eks]
-}
-
-data "aws_ssm_parameter" "argo_key" {
-  name = "/cicd/argo_gitlab_private_key"
+  depends_on = [
+    kubernetes_namespace.argocd,
+    helm_release.aws_lb_controller
+  ]
 }
 
 resource "kubernetes_secret" "argocd_gitlab_repo" {
   metadata {
     name      = "gitlab-argo-repo"
-    namespace = "argocd"
-    labels    = { "argocd.argoproj.io/secret-type" = "repository" }
+    namespace = kubernetes_namespace.argocd.metadata[0].name
+    labels = {
+      "argocd.argoproj.io/secret-type" = "repository"
+    }
   }
 
-  data = {
-    url           = var.gitlab_argo_repo
-    sshPrivateKey = data.aws_ssm_parameter.argo_key.value
+  string_data = {
+    type     = "git"
+    url      = var.gitlab_argo_repo
+    password = var.gitlab_argo_token
   }
 
-  depends_on = [kubernetes_namespace.argocd]
+  depends_on = [helm_release.argo_cd]
 }
 
-# add cname record in cloudflare for app (weather app)
-resource "cloudflare_record" "weather_app" {
-  zone_id = local.zone_id
-  name    = "dev-weather.${var.base_domain}"
-  value   = module.eks.cluster_endpoint
-  type    = "CNAME"
-  ttl     = 300
-}
-
+# Update kubeconfig for local access
 resource "null_resource" "update_kubeconfig" {
-  triggers = {
-    cluster = module.eks.cluster_name
-    region  = var.region
+  provisioner "local-exec" {
+    command = "aws eks update-kubeconfig --region ${var.region} --name ${module.eks.cluster_name}"
   }
 
   depends_on = [module.eks]
-
-  provisioner "local-exec" {
-    command = "aws eks update-kubeconfig --name ${self.triggers.cluster} --region ${self.triggers.region}"
-  }
-
-  provisioner "local-exec" {
-    when    = destroy
-    command = <<EOT
-kubectl config delete-context ${self.triggers.cluster} || true
-kubectl config delete-cluster ${self.triggers.cluster} || true
-kubectl config unset users.${self.triggers.cluster}-aws || true
-EOT
-  }
 }

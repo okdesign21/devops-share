@@ -28,24 +28,25 @@ provider "aws" {
 
 # Data sources for EKS cluster info
 data "aws_eks_cluster" "this" {
-  name = module.eks.cluster_name
+  count = var.enable_eks_data_lookup ? 1 : 0
+  name  = module.eks.cluster_name
 }
 
 data "aws_eks_cluster_auth" "this" {
-  name       = module.eks.cluster_name
-  depends_on = [module.eks]
+  count = var.enable_eks_data_lookup ? 1 : 0
+  name  = module.eks.cluster_name
 }
 
 provider "kubernetes" {
-  host                   = data.aws_eks_cluster.this.endpoint
-  cluster_ca_certificate = base64decode(data.aws_eks_cluster.this.certificate_authority[0].data)
-  token                  = data.aws_eks_cluster_auth.this.token
+  host                   = length(data.aws_eks_cluster.this) > 0 ? data.aws_eks_cluster.this[0].endpoint : ""
+  cluster_ca_certificate = length(data.aws_eks_cluster.this) > 0 ? base64decode(data.aws_eks_cluster.this[0].certificate_authority[0].data) : ""
+  token                  = length(data.aws_eks_cluster_auth.this) > 0 ? data.aws_eks_cluster_auth.this[0].token : ""
 }
 
 provider "helm" {
   kubernetes = {
-    host                   = data.aws_eks_cluster.this.endpoint
-    cluster_ca_certificate = base64decode(data.aws_eks_cluster.this.certificate_authority[0].data)
-    token                  = data.aws_eks_cluster_auth.this.token
+    host                   = length(data.aws_eks_cluster.this) > 0 ? data.aws_eks_cluster.this[0].endpoint : ""
+    cluster_ca_certificate = length(data.aws_eks_cluster.this) > 0 ? base64decode(data.aws_eks_cluster.this[0].certificate_authority[0].data) : ""
+    token                  = length(data.aws_eks_cluster_auth.this) > 0 ? data.aws_eks_cluster_auth.this[0].token : ""
   }
 }

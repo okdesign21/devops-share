@@ -41,3 +41,11 @@ output "gitlab_url" {
 output "jenkins_url" {
   value = local.jenkins_url
 }
+
+output "jenkins_private_ip" {
+  value = module.jenkins_server.private_ip
+}
+
+output "gitlab_private_ip" {
+  value = module.gitlab.private_ip
+}

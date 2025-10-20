@@ -32,11 +32,19 @@ data "cloudflare_zones" "this" {
 locals {
   vpc_id             = data.terraform_remote_state.network.outputs.vpc_id
   private_subnet_ids = data.terraform_remote_state.network.outputs.private_subnet_ids
-  zone_id            = one(data.cloudflare_zones.this.zones).id
+  zone_id            = data.cloudflare_zones.this.result[0].id
+  cicd_alb           = data.terraform_remote_state.cicd.outputs.cicd_alb_dns
+
   jenkins_host       = "jenkins.${var.env}.${var.base_domain}"
   gitlab_host        = "gitlab.${var.env}.${var.base_domain}"
-  cicd_alb           = data.terraform_remote_state.cicd.outputs.cicd_alb_dns
-  cluster_endpoint   = element(split("/", replace(replace(data.terraform_remote_state.eks.outputs.cluster_endpoint, "https://", ""), "http://", "")), 0)
+  jenkins_private_ip = data.terraform_remote_state.cicd.outputs.jenkins_private_ip
+  gitlab_private_ip  = data.terraform_remote_state.cicd.outputs.gitlab_private_ip
+
+  weather_app_host = "weather.${var.env}.${var.base_domain}"
+  argocd_host      = "argocd.${var.env}.${var.base_domain}"
+
+  ingress_alb_dns  = data.terraform_remote_state.eks.outputs.cluster_alb_dns_name
+  ingress_alb_zone = data.terraform_remote_state.eks.outputs.cluster_alb_zone_id
 }
 
 resource "aws_route53_zone" "private" {
@@ -56,56 +64,77 @@ resource "aws_acm_certificate" "apps" {
   }
 }
 
-resource "cloudflare_record" "jenkins" {
+resource "cloudflare_dns_record" "jenkins" {
   zone_id = local.zone_id
   name    = local.jenkins_host
   type    = "CNAME"
-  value   = local.cicd_alb
+  content = local.cicd_alb
   proxied = false
+  ttl     = 300
 }
 
-resource "cloudflare_record" "gitlab" {
+resource "aws_route53_record" "jenkins_private" {
+  zone_id = aws_route53_zone.private.zone_id
+  name    = "jenkins"
+  type    = "A"
+  ttl     = 60
+  records = [local.jenkins_private_ip]
+}
+
+
+resource "cloudflare_dns_record" "gitlab" {
   zone_id = local.zone_id
   name    = local.gitlab_host
   type    = "CNAME"
-  value   = local.cicd_alb
+  content = local.cicd_alb
   proxied = false
-}
-
-resource "cloudflare_record" "weather_app" {
-  zone_id = local.zone_id
-  name    = "weather.${var.env}.${var.base_domain}"
-  type    = "CNAME"
   ttl     = 300
-  value   = local.cluster_endpoint
-  proxied = false
 }
 
-resource "cloudflare_record" "argo_cd" {
-  zone_id = local.zone_id
-  name    = "argocd.${var.env}.${var.base_domain}"
-  type    = "CNAME"
-  ttl     = 300
-  value   = local.cluster_endpoint
-  proxied = false
-}
-
-
-/*
-resource "cloudflare_record" "acm_validations" {
-  for_each = {
-    for dvo in aws_acm_certificate.apps.domain_validation_options :
-    dvo.domain_name => {
-      name  = dvo.resource_record_name
-      type  = dvo.resource_record_type
-      value = dvo.resource_record_value
-    }
-  }
-
-  zone_id = local.zone_id
-  name    = each.value.name
-  type    = each.value.type
-  value   = each.value.value
+resource "aws_route53_record" "gitlab_private" {
+  zone_id = aws_route53_zone.private.zone_id
+  name    = "gitlab"
+  type    = "A"
   ttl     = 60
+  records = [local.gitlab_private_ip]
+}
+
+resource "cloudflare_dns_record" "weather_app" {
+  zone_id = local.zone_id
+  name    = local.weather_app_host
+  type    = "CNAME"
+  ttl     = 300
+  content = local.ingress_alb_dns
   proxied = false
-}*/
+}
+
+resource "aws_route53_record" "weather" {
+  zone_id = aws_route53_zone.private.zone_id
+  name    = "weather"
+  type    = "A"
+  alias {
+    name                   = local.ingress_alb_dns
+    zone_id                = local.ingress_alb_zone
+    evaluate_target_health = true
+  }
+}
+
+resource "cloudflare_dns_record" "argo_cd" {
+  zone_id = local.zone_id
+  name    = local.argocd_host
+  type    = "CNAME"
+  ttl     = 300
+  content = local.ingress_alb_dns
+  proxied = false
+}
+
+resource "aws_route53_record" "argocd" {
+  zone_id = aws_route53_zone.private.zone_id
+  name    = "argocd"
+  type    = "A"
+  alias {
+    name                   = local.ingress_alb_dns
+    zone_id                = local.ingress_alb_zone
+    evaluate_target_health = true
+  }
+}

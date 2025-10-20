@@ -3,14 +3,12 @@ output "name" {
 }
 
 output "cluster_arn" {
-  description = "EKS cluster ARN"
-  value       = data.aws_eks_cluster.this.arn
+  value = try(data.aws_eks_cluster.this[0].arn, "")
 }
 
 output "cluster_certificate_authority_data" {
-  description = "Base64 CA certificate for the cluster (as provided by AWS)"
-  value       = data.aws_eks_cluster.this.certificate_authority[0].data
-  sensitive   = true
+  value     = try(data.aws_eks_cluster.this[0].certificate_authority[0].data, "")
+  sensitive = true
 }
 
 output "kubeconfig_command" {
@@ -18,9 +16,14 @@ output "kubeconfig_command" {
   value       = "aws eks update-kubeconfig --name ${module.eks.cluster_name} --region ${var.region}"
 }
 
-output "cluster_alb_hostname" {
-  value       = try(data.kubernetes_ingress_v1.argocd.status[0].load_balancer[0].ingress[0].hostname, "")
-  description = "ALB hostname created by AWS LB Controller for the ArgoCD ingress (empty until created)"
+output "cluster_alb_dns_name" {
+  description = "DNS name of the cluster shared ALB (or empty if not found)"
+  value       = length(data.aws_lb.cluster_alb) > 0 ? data.aws_lb.cluster_alb[0].dns_name : ""
+}
+
+output "cluster_alb_zone_id" {
+  description = "Zone ID for the cluster shared ALB (or empty if not found)"
+  value       = length(data.aws_lb.cluster_alb) > 0 ? data.aws_lb.cluster_alb[0].zone_id : ""
 }
 
 output "cluster_name" {
@@ -40,7 +43,7 @@ output "cluster_version" {
 
 output "argocd_namespace" {
   description = "ArgoCD namespace"
-  value       = kubernetes_namespace.argocd.metadata[0].name
+  value       = try(kubernetes_namespace.argocd[0].metadata[0].name, "")
 }
 
 output "alb_controller_role_arn" {

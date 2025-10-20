@@ -4,11 +4,6 @@ variable "cluster_version" {
   default     = "1.34"
 }
 
-variable "desired_size" {
-  type    = number
-  default = 2
-}
-
 variable "min_size" {
   type        = number
   description = "Minimum number of nodes"
@@ -88,4 +83,22 @@ variable "lab_ip" {
 variable "base_domain" {
   type        = string
   description = "Base domain"
+}
+
+variable "create_oidc_provider" {
+  description = "Create OIDC provider in this stack. Set to false if provider already exists."
+  type        = bool
+  default     = true
+}
+
+variable "cluster_alb_name" {
+  description = "Optional explicit name for the shared ALB. If empty, skip AWS LB lookup."
+  type        = string
+  default     = ""
+}
+
+variable "enable_eks_data_lookup" {
+  description = "Enable data.aws_eks_cluster lookups (set true after cluster exists)."
+  type        = bool
+  default     = false
 }

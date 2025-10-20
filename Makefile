@@ -35,24 +35,3 @@ destroy:
 		echo "== terraform destroy $$s ==" ; \
 		( cd envs/$(ENV)/$$s && terraform destroy -var-file=../../common.tfvars -auto-approve ) || exit 1; \
 	done
-
-refresh:
-    @for s in $(STACK_LIST) ; do \
-        echo "== terraform refresh $$s ==" ; \
-        ( cd envs/$(ENV)/$$s && terraform refresh -var-file=../../common.tfvars ) || exit 1; \
-    done
-
-output:
-    @for s in $(STACK_LIST) ; do \
-        echo "== terraform output $$s ==" ; \
-        ( cd envs/$(ENV)/$$s && terraform output ) || exit 1; \
-    done
-
-validate:
-    @for s in $(STACK_LIST) ; do \
-        echo "== terraform validate $$s ==" ; \
-        ( cd envs/$(ENV)/$$s && terraform validate ) || exit 1; \
-    done
-
-fmt:
-    @terraform fmt -recursive .

@@ -37,7 +37,7 @@ module "eks" {
 
   enable_cluster_creator_admin_permissions = true
 
-  cluster_addons = {
+  addons = {
     coredns = {
       most_recent = true
     }
@@ -75,13 +75,11 @@ data "tls_certificate" "eks_oidc" {
 }
 
 resource "aws_iam_openid_connect_provider" "eks" {
-  count = module.eks.oidc_provider_arn == "" ? 1 : 0
+  count = (var.create_oidc_provider && var.enable_eks_data_lookup) ? 1 : 0
 
+  url             = data.aws_eks_cluster.this[0].identity[0].oidc[0].issuer
   client_id_list  = ["sts.amazonaws.com"]
   thumbprint_list = [data.tls_certificate.eks_oidc.certificates[0].sha1_fingerprint]
-  url             = module.eks.cluster_oidc_issuer_url
-
-  tags = local.tags
 }
 
 locals {
@@ -134,37 +132,40 @@ resource "aws_iam_role_policy_attachment" "alb_controller" {
 }
 
 resource "helm_release" "aws_lb_controller" {
+  count = var.enable_eks_data_lookup ? 1 : 0
+
   name       = "aws-load-balancer-controller"
   repository = "https://aws.github.io/eks-charts"
   chart      = "aws-load-balancer-controller"
   namespace  = "kube-system"
   version    = "1.8.1"
 
-  set {
-    name  = "clusterName"
-    value = module.eks.cluster_name
-  }
-
-  set {
-    name  = "serviceAccount.create"
-    value = "true"
-  }
-
-  set {
-    name  = "serviceAccount.name"
-    value = "aws-load-balancer-controller"
-  }
-
-  set {
-    name  = "serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn"
-    value = aws_iam_role.alb_controller.arn
-  }
+  set = [
+    {
+      name  = "clusterName"
+      value = module.eks.cluster_name
+    },
+    {
+      name  = "serviceAccount.create"
+      value = "true"
+    },
+    {
+      name  = "serviceAccount.name"
+      value = "aws-load-balancer-controller"
+    },
+    {
+      name  = "serviceAccount.annotations.eks.amazonaws.com/role-arn"
+      value = aws_iam_role.alb_controller.arn
+    }
+  ]
 
   depends_on = [module.eks]
 }
 
 # --- ArgoCD Installation ---
 resource "kubernetes_namespace" "argocd" {
+  count = var.enable_eks_data_lookup ? 1 : 0
+
   metadata {
     name = "argocd"
   }
@@ -173,14 +174,16 @@ resource "kubernetes_namespace" "argocd" {
 }
 
 resource "helm_release" "argo_cd" {
+  count = var.enable_eks_data_lookup ? 1 : 0
+
   name       = "argocd"
   repository = "https://argoproj.github.io/argo-helm"
   chart      = "argo-cd"
-  namespace  = kubernetes_namespace.argocd.metadata[0].name
+  namespace  = kubernetes_namespace.argocd[count.index].metadata[0].name
   version    = var.argocd_chart_version
 
   values = [
-    templatefile("${path.module}/argocd-values.tpl", {
+    templatefile("${path.module}/kube-manifests/argocd-values.tpl", {
       base_domain = var.base_domain
       env         = var.env
     })
@@ -194,9 +197,11 @@ resource "helm_release" "argo_cd" {
 
 # ArgoCD GitLab Repository Secret
 resource "kubernetes_secret" "argocd_gitlab_repo" {
+  count = var.enable_eks_data_lookup ? 1 : 0
+
   metadata {
     name      = "gitlab-argo-repo"
-    namespace = kubernetes_namespace.argocd.metadata[0].name
+    namespace = kubernetes_namespace.argocd[count.index].metadata[0].name
     labels = {
       "argocd.argoproj.io/secret-type" = "repository"
     }
@@ -214,9 +219,11 @@ resource "kubernetes_secret" "argocd_gitlab_repo" {
 
 # ArgoCD ConfigMap for resource exclusions
 resource "kubernetes_config_map_v1_data" "argocd_defaults" {
+  count = var.enable_eks_data_lookup ? 1 : 0
+
   metadata {
     name      = "argocd-cm"
-    namespace = kubernetes_namespace.argocd.metadata[0].name
+    namespace = kubernetes_namespace.argocd[count.index].metadata[0].name
   }
 
   data = {
@@ -238,6 +245,8 @@ resource "kubernetes_config_map_v1_data" "argocd_defaults" {
 
 # Update kubeconfig for local access
 resource "null_resource" "update_kubeconfig" {
+  count = var.enable_eks_data_lookup ? 1 : 0
+
   provisioner "local-exec" {
     command = "aws eks update-kubeconfig --region ${var.region} --name ${module.eks.cluster_name}"
   }
@@ -249,9 +258,19 @@ resource "null_resource" "update_kubeconfig" {
   }
 }
 
-resource "kubernetes_manifest" "platform_project" {
-  # load manifest from file and decode to map
-  manifest = yamldecode(file("${path.module}/platform-project.yaml"))
+resource "kubernetes_manifest" "shared_alb_owner" {
+  count = (var.enable_eks_data_lookup && var.cluster_alb_name != "") ? 1 : 0
 
-  depends_on = [helm_release.argo_cd]
+  manifest = yamldecode(
+    templatefile("${path.module}/kube-manifests/shared-alb-owner.yaml", {
+      cluster_alb_name = var.cluster_alb_name
+    })
+  )
+
+  depends_on = [helm_release.aws_lb_controller]
+}
+
+data "aws_lb" "cluster_alb" {
+  count = var.cluster_alb_name != "" ? 1 : 0
+  name  = var.cluster_alb_name
 }

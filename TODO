@@ -1,4 +1,5 @@
 make sure helm is correct > apps of apps 
+fix dns stack - public argo and weather links....
 connect to secret manager - Infisical Cloud?
 test pipline
 change pipline to eks

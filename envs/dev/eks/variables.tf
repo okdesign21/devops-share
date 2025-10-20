@@ -1,18 +1,7 @@
-variable "region" {
-  type        = string
-  description = "AWS region"
-  default     = "eu-central-1"
-}
-
-variable "project_name" {
-  type    = string
-  default = ""
-}
-
 variable "cluster_version" {
   type        = string
   description = "Kubernetes version"
-  default     = "1.33"
+  default     = "1.34"
 }
 
 variable "desired_size" {
@@ -21,92 +10,82 @@ variable "desired_size" {
 }
 
 variable "min_size" {
-  type    = number
-  default = 2
+  type        = number
+  description = "Minimum number of nodes"
+  default     = 2
 }
 
 variable "max_size" {
-  type    = number
-  default = 4
+  type        = number
+  description = "Maximum number of nodes"
+  default     = 4
+}
+
+variable "desired_size" {
+  type        = number
+  description = "Desired number of nodes"
+  default     = 2
 }
 
 variable "node_instance_types" {
-  type    = list(string)
-  default = ["m7i-flex.large"]
-}
-
-# Helm chart versions (pin for reproducibility)
-variable "argocd_chart_version" {
-  type    = string
-  default = "7.6.12"
-}
-
-variable "tags" {
-  description = "A map of tags to assign to resources."
-  type        = map(string)
-  default     = {}
-}
-
-variable "ubuntu_ami" {
-  description = "SSM parameter or AMI id for ubuntu fallback (provided via common.tfvars)"
-  type        = string
-  default     = ""
-}
-
-variable "state_bucket" {
-  description = "State bucket name (present in common.tfvars)"
-  type        = string
-  default     = ""
-}
-
-variable "state_prefix" {
-  description = "State prefix (present in common.tfvars)"
-  type        = string
-  default     = ""
-}
-
-variable "home_ip" {
-  description = "CIDR block for home IP to allow public access to EKS API"
-  type        = string
-}
-
-variable "lab_ip" {
-  description = "CIDR block for lab IP to allow public access to EKS API"
-  type        = string
+  type        = list(string)
+  description = "EC2 instance types for nodes"
+  default     = ["t3.small", "m7i-flex.large"]
 }
 
 variable "gitlab_argo_repo" {
-  description = "GitLab repository for Argo CD"
   type        = string
-  default     = ""
-}
-
-variable "cloudflare_api_token" {
-  description = "Cloudflare API token with DNS edit permissions"
-  type        = string
-  default     = ""
-}
-
-variable "base_domain" {
-  description = "base domain"
-  default     = ""
-  type        = string
+  description = "GitLab repository URL for ArgoCD"
 }
 
 variable "gitlab_argo_token" {
-  description = "GitLab personal access token for Argo CD repository access"
   type        = string
-  default     = ""
+  description = "GitLab access token for ArgoCD"
+  sensitive   = true
+}
+
+variable "argocd_chart_version" {
+  type        = string
+  description = "ArgoCD Helm chart version"
+  default     = "7.6.12"
+}
+
+variable "region" {
+  type        = string
+  description = "AWS region"
+}
+
+variable "project_name" {
+  type        = string
+  description = "Project name"
 }
 
 variable "env" {
   type        = string
-  description = "Environment name (dev, prod, etc.)"
-  default     = ""
+  description = "Environment (dev/prod)"
 }
 
-variable "node_disk_size" {
-  description = "EKS node disk size in GB"
-  type        = number
-  default     = 20
+variable "state_bucket" {
+  type        = string
+  description = "S3 bucket for Terraform state"
+}
+
+variable "state_prefix" {
+  type        = string
+  description = "State prefix path"
+}
+
+variable "home_ip" {
+  type        = string
+  description = "Home IP for API access"
+}
+
+variable "lab_ip" {
+  type        = string
+  description = "Lab IP for API access"
+}
+
+variable "base_domain" {
+  type        = string
+  description = "Base domain"
 }

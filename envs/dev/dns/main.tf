@@ -2,7 +2,7 @@ data "terraform_remote_state" "network" {
   backend = "s3"
   config = {
     bucket = var.state_bucket
-    key    = "${var.state_prefix}/dev/network/terraform.tfstate"
+    key    = "${var.state_prefix}/${var.env}/network/terraform.tfstate"
     region = var.region
   }
 }
@@ -11,7 +11,7 @@ data "terraform_remote_state" "cicd" {
   backend = "s3"
   config = {
     bucket = var.state_bucket
-    key    = "${var.state_prefix}/dev/cicd/terraform.tfstate"
+    key    = "${var.state_prefix}/${var.env}/cicd/terraform.tfstate"
     region = var.region
   }
 }
@@ -20,7 +20,7 @@ data "terraform_remote_state" "eks" {
   backend = "s3"
   config = {
     bucket = var.state_bucket
-    key    = "${var.state_prefix}/dev/eks/terraform.tfstate"
+    key    = "${var.state_prefix}/${var.env}/eks/terraform.tfstate"
     region = var.region
   }
 }

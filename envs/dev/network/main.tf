@@ -26,10 +26,10 @@ resource "aws_iam_instance_profile" "ssm" {
 }
 
 locals {
-cidr_base = lookup({
+  cidr_base = lookup({
     dev  = 10
     prod = 20
-  }, var.env, 30)  # 30 is default for any other env
+  }, var.env, 30) # 30 is default for any other env
 
   availability_zones = ["${var.region}a", "${var.region}b"]
   vpc_cidr           = format("%d.10.0.0/16", local.cidr_base)

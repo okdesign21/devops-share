@@ -2,7 +2,7 @@ data "terraform_remote_state" "network" {
   backend = "s3"
   config = {
     bucket = var.state_bucket
-    key    = "${var.state_prefix}/dev/network/terraform.tfstate"
+    key    = "${var.state_prefix}/${var.env}/network/terraform.tfstate"
     region = var.region
   }
 }
@@ -11,7 +11,7 @@ locals {
   vpc_id             = data.terraform_remote_state.network.outputs.vpc_id
   private_subnet_ids = data.terraform_remote_state.network.outputs.private_subnet_ids
   cluster_name       = "${var.project_name}-${var.env}-cluster"
-  
+
   tags = {
     Environment = var.env
     Project     = var.project_name
@@ -23,13 +23,17 @@ module "eks" {
   source  = "terraform-aws-modules/eks/aws"
   version = "~> 21.4"
 
-  cluster_name    = local.cluster_name
-  cluster_version = var.cluster_version
+  name               = local.cluster_name
+  kubernetes_version = var.cluster_version
 
-  vpc_id     = local.vpc_id
-  subnet_ids = local.private_subnet_ids
-
-  cluster_endpoint_public_access = true
+  vpc_id                  = local.vpc_id
+  subnet_ids              = local.private_subnet_ids
+  endpoint_private_access = true
+  endpoint_public_access  = true
+  endpoint_public_access_cidrs = [
+    var.home_ip,
+    var.lab_ip,
+  ]
 
   enable_cluster_creator_admin_permissions = true
 
@@ -47,9 +51,9 @@ module "eks" {
 
   eks_managed_node_groups = {
     main = {
-      min_size     = var.node_group_min_size
-      max_size     = var.node_group_max_size
-      desired_size = var.node_group_desired_size
+      min_size     = var.min_size
+      max_size     = var.max_size
+      desired_size = var.desired_size
 
       instance_types = var.node_instance_types
       capacity_type  = "ON_DEMAND"
@@ -87,7 +91,20 @@ locals {
   )
 }
 
-# --- AWS Load Balancer Controller ---
+# --- AWS Load Balancer Controller IAM Policy ---
+data "aws_caller_identity" "current" {}
+
+resource "aws_iam_policy" "alb_controller" {
+  name        = "AWSLoadBalancerControllerIAMPolicy"
+  path        = "/"
+  description = "IAM policy for AWS Load Balancer Controller"
+
+  # load policy JSON from external file
+  policy = file("${path.module}/iam-policy-alb.json")
+
+  tags = local.tags
+}
+
 resource "aws_iam_role" "alb_controller" {
   name = "${local.cluster_name}-alb-controller"
 
@@ -113,10 +130,8 @@ resource "aws_iam_role" "alb_controller" {
 
 resource "aws_iam_role_policy_attachment" "alb_controller" {
   role       = aws_iam_role.alb_controller.name
-  policy_arn = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:policy/AWSLoadBalancerControllerIAMPolicy"
+  policy_arn = aws_iam_policy.alb_controller.arn
 }
-
-data "aws_caller_identity" "current" {}
 
 resource "helm_release" "aws_lb_controller" {
   name       = "aws-load-balancer-controller"
@@ -165,28 +180,9 @@ resource "helm_release" "argo_cd" {
   version    = var.argocd_chart_version
 
   values = [
-    yamlencode({
-      server = {
-        service = {
-          type = "ClusterIP"
-        }
-        ingress = {
-          enabled = true
-          annotations = {
-            "kubernetes.io/ingress.class"               = "alb"
-            "alb.ingress.kubernetes.io/scheme"          = "internet-facing"
-            "alb.ingress.kubernetes.io/target-type"     = "ip"
-            "alb.ingress.kubernetes.io/listen-ports"    = jsonencode([{ HTTPS = 443 }])
-            "alb.ingress.kubernetes.io/ssl-redirect"    = "443"
-          }
-          hosts = ["argocd.${var.env}.${var.base_domain}"]
-        }
-      }
-      configs = {
-        params = {
-          "server.insecure" = true
-        }
-      }
+    templatefile("${path.module}/argocd-values.tpl", {
+      base_domain = var.base_domain
+      env         = var.env
     })
   ]
 
@@ -196,6 +192,7 @@ resource "helm_release" "argo_cd" {
   ]
 }
 
+# ArgoCD GitLab Repository Secret
 resource "kubernetes_secret" "argocd_gitlab_repo" {
   metadata {
     name      = "gitlab-argo-repo"
@@ -205,11 +202,36 @@ resource "kubernetes_secret" "argocd_gitlab_repo" {
     }
   }
 
-  string_data = {
-    type     = "git"
-    url      = var.gitlab_argo_repo
-    password = var.gitlab_argo_token
+  data = {
+    type     = base64encode("git")
+    url      = base64encode(var.gitlab_argo_repo)
+    password = base64encode(var.gitlab_argo_token)
+    username = base64encode("git")
   }
+
+  depends_on = [helm_release.argo_cd]
+}
+
+# ArgoCD ConfigMap for resource exclusions
+resource "kubernetes_config_map_v1_data" "argocd_defaults" {
+  metadata {
+    name      = "argocd-cm"
+    namespace = kubernetes_namespace.argocd.metadata[0].name
+  }
+
+  data = {
+    "resource.exclusions"                = <<-EOT
+      - apiGroups:
+        - cilium.io
+        kinds:
+        - CiliumIdentity
+        clusters:
+        - "*"
+    EOT
+    "application.resourceTrackingMethod" = "annotation"
+  }
+
+  force = true
 
   depends_on = [helm_release.argo_cd]
 }
@@ -221,4 +243,15 @@ resource "null_resource" "update_kubeconfig" {
   }
 
   depends_on = [module.eks]
+
+  triggers = {
+    cluster_name = module.eks.cluster_name
+  }
+}
+
+resource "kubernetes_manifest" "platform_project" {
+  # load manifest from file and decode to map
+  manifest = yamldecode(file("${path.module}/platform-project.yaml"))
+
+  depends_on = [helm_release.argo_cd]
 }

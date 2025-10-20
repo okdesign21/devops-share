@@ -1,8 +1,12 @@
-make sure helm is correct > apps of apps 
+check deployed app (comment jenkins..)
+pipleine - add helm repoupdate
+pipleine - check multi branch
+check env on images - rm cloud init files... (not sure did this)
 fix dns stack - public argo and weather links....
 connect to secret manager - Infisical Cloud?
-test pipline
-change pipline to eks
 connect internal communication (prod > dev)
-prometues and monitoring
+check prometues and monitoring
+change folder layout
+
 jenkins x?
+manager cluster? (aka stage env)

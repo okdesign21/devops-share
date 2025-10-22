@@ -2,19 +2,9 @@ data "terraform_remote_state" "network" {
   backend = "s3"
   config = {
     bucket = var.state_bucket
-    key    = "${var.state_prefix}/${var.env}/network/terraform.tfstate"
+    key    = "${var.project_name}/${var.env}/network/terraform.tfstate"
     region = var.region
   }
-}
-
-module "ud_jenkins_agent" {
-  source = "../../../modules/userdata"
-  scripts = [
-    "${path.module}/../../../modules/userdata/common/swap.sh",
-    "${path.module}/../../../modules/userdata/common/ssm.sh",
-    "${path.module}/../../../modules/userdata/common/docker.sh",
-    "${path.module}/../../../modules/userdata/compose/jenkins_agent.sh"
-  ]
 }
 
 # caller identity so tag lookups can default to your account when ami_owner_ids is empty
@@ -223,6 +213,8 @@ module "jenkins_server" {
   root_volume_size_gb  = var.jenkins_server_volume_size_gb
   associate_public_ip  = false
   iam_instance_profile = local.ssm_profile
+  project_name         = var.project_name
+  env                  = var.env
   depends_on           = [null_resource.require_amis]
 
   user_data = module.ud_jenkins_server.content
@@ -252,11 +244,26 @@ module "gitlab" {
   instance_type       = var.gitlab_server_instance_type
   root_volume_size_gb = var.gitlab_volume_size_gb
   associate_public_ip = false
-
-  user_data = module.ud_gitlab.content
+  project_name        = var.project_name
+  env                 = var.env
+  user_data           = module.ud_gitlab.content
 
   iam_instance_profile = local.ssm_profile
   depends_on           = [null_resource.require_amis]
+}
+
+module "ud_jenkins_agent" {
+  source = "../../../modules/userdata"
+  scripts = [
+    "${path.module}/../../../modules/userdata/common/swap.sh",
+    "${path.module}/../../../modules/userdata/common/ssm.sh",
+    "${path.module}/../../../modules/userdata/common/docker.sh",
+    "${path.module}/../../../modules/userdata/compose/jenkins_agent.sh",
+    templatefile("../../../modules/userdata/templates/jenkins_agnt_env.tpl", 
+    {
+      jenkins_url     = local.jenkins_url
+    })
+  ]
 }
 
 module "jenkins_agent" {
@@ -273,6 +280,8 @@ module "jenkins_agent" {
   user_data            = module.ud_jenkins_agent.content
   iam_instance_profile = local.ssm_profile
   depends_on           = [null_resource.require_amis]
+  project_name         = var.project_name
+  env                  = var.env
 }
 
 resource "aws_lb_target_group_attachment" "jenkins" {

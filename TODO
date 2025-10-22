@@ -1,8 +1,13 @@
 check deployed app (comment jenkins..)
 pipleine - add helm repoupdate
 pipleine - check multi branch
+
 check env on images - rm cloud init files... (not sure did this)
+jenkins image tag (server + agent)
+agent connection via cloud not token???
+
 fix dns stack - public argo and weather links....
+
 connect to secret manager - Infisical Cloud?
 connect internal communication (prod > dev)
 check prometues and monitoring

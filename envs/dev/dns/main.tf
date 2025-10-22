@@ -2,7 +2,7 @@ data "terraform_remote_state" "network" {
   backend = "s3"
   config = {
     bucket = var.state_bucket
-    key    = "${var.state_prefix}/${var.env}/network/terraform.tfstate"
+    key    = "${var.project_name}/${var.env}/network/terraform.tfstate"
     region = var.region
   }
 }
@@ -11,7 +11,7 @@ data "terraform_remote_state" "cicd" {
   backend = "s3"
   config = {
     bucket = var.state_bucket
-    key    = "${var.state_prefix}/${var.env}/cicd/terraform.tfstate"
+    key    = "${var.project_name}/${var.env}/cicd/terraform.tfstate"
     region = var.region
   }
 }
@@ -20,7 +20,7 @@ data "terraform_remote_state" "eks" {
   backend = "s3"
   config = {
     bucket = var.state_bucket
-    key    = "${var.state_prefix}/${var.env}/eks/terraform.tfstate"
+    key    = "${var.project_name}/${var.env}/eks/terraform.tfstate"
     region = var.region
   }
 }
@@ -100,6 +100,7 @@ resource "aws_route53_record" "gitlab_private" {
 }
 
 resource "cloudflare_dns_record" "weather_app" {
+  count   = local.ingress_alb_dns != "" ? 1 : 0
   zone_id = local.zone_id
   name    = local.weather_app_host
   type    = "CNAME"
@@ -109,6 +110,7 @@ resource "cloudflare_dns_record" "weather_app" {
 }
 
 resource "aws_route53_record" "weather" {
+  count   = local.ingress_alb_dns != "" ? 1 : 0
   zone_id = aws_route53_zone.private.zone_id
   name    = "weather"
   type    = "A"
@@ -120,6 +122,7 @@ resource "aws_route53_record" "weather" {
 }
 
 resource "cloudflare_dns_record" "argo_cd" {
+  count   = local.ingress_alb_dns != "" ? 1 : 0
   zone_id = local.zone_id
   name    = local.argocd_host
   type    = "CNAME"
@@ -129,6 +132,7 @@ resource "cloudflare_dns_record" "argo_cd" {
 }
 
 resource "aws_route53_record" "argocd" {
+  count   = local.ingress_alb_dns != "" ? 1 : 0
   zone_id = aws_route53_zone.private.zone_id
   name    = "argocd"
   type    = "A"

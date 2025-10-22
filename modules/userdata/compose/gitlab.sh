@@ -18,7 +18,7 @@ services:
       - /opt/gitlab/.env
     environment:
       GITLAB_OMNIBUS_CONFIG: |
-        external_url '${GITLAB_EXTERNAL_URL}'
+        external_url = '${GITLAB_EXTERNAL_URL}'
         gitlab_rails['gitlab_https'] = false
         nginx['listen_https'] = false
         nginx['listen_port']  = 80
@@ -38,6 +38,4 @@ services:
       driver: "local"
       options: { max-size: "10m", max-file: "3" }
 YML
-
-cd /opt/gitlab && /usr/local/bin/docker compose up -d
 

@@ -1,10 +1,10 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: cluster-shared-alb-owner
+  name: ${env}-shared-alb-owner
   namespace: kube-system
   annotations:
-    alb.ingress.kubernetes.io/group.name: "cluster-shared-alb"
+    alb.ingress.kubernetes.io/group.name: "${cluster_alb_name}"
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80},{"HTTPS":443}]'
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip

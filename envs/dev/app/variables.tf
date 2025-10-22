@@ -29,12 +29,12 @@ variable "state_bucket" {
   type        = string
 }
 
-variable "state_prefix" {
-  description = "Prefix/path inside the S3 bucket for terraform remote state"
+variable "ubuntu_ami" {
+  description = "SSM parameter name or AMI id for Ubuntu (provided via common.tfvars)"
   type        = string
 }
 
-variable "ubuntu_ami" {
-  description = "SSM parameter name or AMI id for Ubuntu (provided via common.tfvars)"
+variable "env" {
+  description = "Environment name"
   type        = string
 }

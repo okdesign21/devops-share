@@ -1,7 +1,7 @@
 variable "cluster_version" {
   type        = string
   description = "Kubernetes version"
-  default     = "1.34"
+  default     = "1.33"
 }
 
 variable "min_size" {
@@ -28,23 +28,6 @@ variable "node_instance_types" {
   default     = ["t3.small", "m7i-flex.large"]
 }
 
-variable "gitlab_argo_repo" {
-  type        = string
-  description = "GitLab repository URL for ArgoCD"
-}
-
-variable "gitlab_argo_token" {
-  type        = string
-  description = "GitLab access token for ArgoCD"
-  sensitive   = true
-}
-
-variable "argocd_chart_version" {
-  type        = string
-  description = "ArgoCD Helm chart version"
-  default     = "7.6.12"
-}
-
 variable "region" {
   type        = string
   description = "AWS region"
@@ -65,11 +48,6 @@ variable "state_bucket" {
   description = "S3 bucket for Terraform state"
 }
 
-variable "state_prefix" {
-  type        = string
-  description = "State prefix path"
-}
-
 variable "home_ip" {
   type        = string
   description = "Home IP for API access"
@@ -78,27 +56,4 @@ variable "home_ip" {
 variable "lab_ip" {
   type        = string
   description = "Lab IP for API access"
-}
-
-variable "base_domain" {
-  type        = string
-  description = "Base domain"
-}
-
-variable "create_oidc_provider" {
-  description = "Create OIDC provider in this stack. Set to false if provider already exists."
-  type        = bool
-  default     = true
-}
-
-variable "cluster_alb_name" {
-  description = "Optional explicit name for the shared ALB. If empty, skip AWS LB lookup."
-  type        = string
-  default     = ""
-}
-
-variable "enable_eks_data_lookup" {
-  description = "Enable data.aws_eks_cluster lookups (set true after cluster exists)."
-  type        = bool
-  default     = false
 }

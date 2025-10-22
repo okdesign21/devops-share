@@ -40,5 +40,4 @@ services:
         max-size: "10m"
         max-file: "3"
 YML
-cd /opt/jenkins && /usr/local/bin/docker-compose up -d
 

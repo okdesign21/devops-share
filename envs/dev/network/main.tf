@@ -4,7 +4,7 @@ data "aws_ssm_parameter" "ubuntu_24" {
 
 # SSM role & instance profile for Session Manager
 resource "aws_iam_role" "ssm_ec2" {
-  name = "${var.project_name}-ssm-ec2-role"
+  name = "${var.project_name}-${var.env}-ssm-ec2-role"
   assume_role_policy = jsonencode({
     Version = "2012-10-17",
     Statement = [{
@@ -21,7 +21,7 @@ resource "aws_iam_role_policy_attachment" "ssm_core" {
 }
 
 resource "aws_iam_instance_profile" "ssm" {
-  name = "${var.project_name}-ssm-instance-profile"
+  name = "${var.project_name}-${var.env}-ssm-instance-profile"
   role = aws_iam_role.ssm_ec2.name
 }
 
@@ -58,7 +58,7 @@ locals {
 
 module "vpc" {
   source        = "../../../modules/vpc"
-  name          = var.project_name
+  name          = "${var.project_name}-${var.env}"
   cidr_block    = local.vpc_cidr
   azs           = local.availability_zones
   public_cidrs  = local.public_cidrs
@@ -97,14 +97,15 @@ module "nat_instance" {
   ami_id                   = data.aws_ssm_parameter.ubuntu_24.value
   subnet_id                = module.vpc.public_subnet_ids[0]
   sg_ids                   = [aws_security_group.nat.id]
-  key_name                 = var.key_name
+  key_name                 = local.effective_key_name
   instance_type            = var.nat_instance_type
   associate_public_ip      = true
   user_data                = module.ud_nat.content
   enable_source_dest_check = false
   root_volume_size_gb      = var.nat_disk_size_gb
   iam_instance_profile     = aws_iam_instance_profile.ssm.name
-
+  project_name             = var.project_name
+  env                      = var.env
 }
 
 resource "aws_route" "private_nat" {

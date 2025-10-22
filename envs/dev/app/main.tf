@@ -2,7 +2,7 @@ data "terraform_remote_state" "network" {
   backend = "s3"
   config = {
     bucket = var.state_bucket
-    key    = "${var.state_prefix}/${var.env}/network/terraform.tfstate"
+    key    = "${var.project_name}/${var.env}/network/terraform.tfstate"
     region = var.region
   }
 }
@@ -86,6 +86,8 @@ module "app" {
   associate_public_ip  = false
   user_data            = module.ud_app.content
   iam_instance_profile = data.terraform_remote_state.network.outputs.ssm_instance_profile_name
+  project_name         = var.project_name
+  env                  = var.env
 }
 
 resource "aws_lb_target_group_attachment" "app" {

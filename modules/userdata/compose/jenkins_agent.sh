@@ -20,7 +20,7 @@ services:
     build: .
     restart: always
     environment:
-      - JENKINS_URL=http://${ALB_DNS}/jenkins
+      - JENKINS_URL= '${JENKINS_URL}'
       - JENKINS_AGENT_NAME=docker
       - JENKINS_SECRET=__REPLACE_ME__
       - JENKINS_WEB_SOCKET=true
@@ -37,6 +37,3 @@ services:
 volumes:
   agent_data:
 YML
-
-cd /opt/jenkins-agent && /usr/local/bin/docker-compose up -d
-

@@ -10,7 +10,5 @@ EOF
 chown root:root /opt/gitlab/.env || true
 chmod 640 /opt/gitlab/.env || true
 
-if command -v docker compose >/dev/null 2>&1 && [ -f /opt/gitlab/docker-compose.yml ]; then
-  docker compose -f /opt/gitlab/docker-compose.yml down || true
-  docker compose -f /opt/gitlab/docker-compose.yml up -d || true
-fi
+DOCKER_BIN="$(command -v docker)"
+"$DOCKER_BIN" compose up -d -f /opt/gitlab/docker-compose.yml

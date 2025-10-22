@@ -1,6 +1,6 @@
 locals {
   use_generated_key  = var.key_name == null || var.key_name == ""
-  effective_key_name = local.use_generated_key ? "${var.project_name}-key" : var.key_name
+  effective_key_name = local.use_generated_key ? "${var.project_name}-${var.env}-key" : var.key_name
 }
 
 resource "tls_private_key" "gen" {

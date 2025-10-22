@@ -48,3 +48,7 @@ secrets.*
 .env
 .env.*
 *.pem
+
+# VSCode
+.vscode/
+.idea/

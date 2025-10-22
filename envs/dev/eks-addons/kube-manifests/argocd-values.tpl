@@ -8,7 +8,7 @@ server:
     enabled: true
     ingressClassName: "alb"
     annotations:
-      alb.ingress.kubernetes.io/group.name: "cluster-shared-alb"
+      alb.ingress.kubernetes.io/group.name: "${cluster_alb_name}"
       alb.ingress.kubernetes.io/scheme: "internet-facing"
       alb.ingress.kubernetes.io/target-type: "ip"
       alb.ingress.kubernetes.io/healthcheck-path: "/healthz"
@@ -22,3 +22,10 @@ configs:
   cm:
     timeout.reconciliation: "180s"
     application.resourceTrackingMethod: "annotation"
+    resource.exclusions: |
+      - apiGroups:
+        - cilium.io
+        kinds:
+        - CiliumIdentity
+        clusters:
+        - "*"

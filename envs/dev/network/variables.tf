@@ -37,11 +37,6 @@ variable "state_bucket" {
   type        = string
 }
 
-variable "state_prefix" {
-  description = "Prefix/path inside the S3 bucket for remote state (provided via common.tfvars)"
-  type        = string
-}
-
 variable "env" {
   type = string
 }

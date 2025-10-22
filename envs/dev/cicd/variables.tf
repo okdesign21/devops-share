@@ -8,11 +8,6 @@ variable "state_bucket" {
   type        = string
 }
 
-variable "state_prefix" {
-  description = "Remote state key prefix"
-  type        = string
-}
-
 variable "project_name" {
   type = string
 }

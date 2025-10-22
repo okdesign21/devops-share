@@ -47,3 +47,13 @@ variable "iam_instance_profile" {
   type    = string
   default = null
 }
+
+variable "env" {
+  type        = string
+  description = "Environment (dev/prod)"
+}
+
+variable "project_name" {
+  type        = string
+  description = "Project name"
+}

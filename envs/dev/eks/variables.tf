@@ -28,6 +28,11 @@ variable "node_instance_types" {
   default     = ["t3.small", "m7i-flex.large"]
 }
 
+variable "node_instance_size" {
+  type    = number
+  default = 20
+}
+
 variable "region" {
   type        = string
   description = "AWS region"

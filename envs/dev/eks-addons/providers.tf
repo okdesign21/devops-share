@@ -34,26 +34,25 @@ data "terraform_remote_state" "eks" {
 locals {
   cluster_name            = data.terraform_remote_state.eks.outputs.cluster_name
   cluster_endpoint        = data.terraform_remote_state.eks.outputs.cluster_endpoint
-  cluster_ca_data         = try(data.terraform_remote_state.eks.outputs.cluster_certificate_authority_data, "")
-  cluster_oidc_issuer_url = try(data.terraform_remote_state.eks.outputs.cluster_oidc_issuer_url, "")
-  oidc_provider_arn       = try(data.terraform_remote_state.eks.outputs.oidc_provider_arn, "")
+  cluster_ca_data         = data.terraform_remote_state.eks.outputs.cluster_certificate_authority_data
+  cluster_oidc_issuer_url = data.terraform_remote_state.eks.outputs.cluster_oidc_issuer_url
+  oidc_provider_arn       = data.terraform_remote_state.eks.outputs.oidc_provider_arn
 }
 
 data "aws_eks_cluster_auth" "this" {
-  count = var.deploy_addons ? 1 : 0
-  name  = local.cluster_name
+  name = local.cluster_name
 }
 
 provider "kubernetes" {
-  host                   = var.deploy_addons ? local.cluster_endpoint : ""
-  cluster_ca_certificate = var.deploy_addons ? base64decode(local.cluster_ca_data) : ""
-  token                  = var.deploy_addons ? data.aws_eks_cluster_auth.this[0].token : ""
+  host                   = local.cluster_endpoint
+  cluster_ca_certificate = base64decode(local.cluster_ca_data)
+  token                  = data.aws_eks_cluster_auth.this.token
 }
 
 provider "helm" {
   kubernetes = {
-    host                   = var.deploy_addons ? local.cluster_endpoint : ""
-    cluster_ca_certificate = var.deploy_addons ? base64decode(local.cluster_ca_data) : ""
-    token                  = var.deploy_addons ? data.aws_eks_cluster_auth.this[0].token : ""
+    host                   = local.cluster_endpoint
+    cluster_ca_certificate = base64decode(local.cluster_ca_data)
+    token                  = data.aws_eks_cluster_auth.this.token
   }
 }

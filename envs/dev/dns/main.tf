@@ -16,11 +16,11 @@ data "terraform_remote_state" "cicd" {
   }
 }
 
-data "terraform_remote_state" "eks" {
+data "terraform_remote_state" "eks-addons" {
   backend = "s3"
   config = {
     bucket = var.state_bucket
-    key    = "${var.project_name}/${var.env}/eks/terraform.tfstate"
+    key    = "${var.project_name}/${var.env}/eks-addons/terraform.tfstate"
     region = var.region
   }
 }
@@ -43,8 +43,8 @@ locals {
   weather_app_host = "weather.${var.env}.${var.base_domain}"
   argocd_host      = "argocd.${var.env}.${var.base_domain}"
 
-  ingress_alb_dns  = data.terraform_remote_state.eks.outputs.cluster_alb_dns_name
-  ingress_alb_zone = data.terraform_remote_state.eks.outputs.cluster_alb_zone_id
+  ingress_alb_dns  = data.terraform_remote_state.eks-addons.outputs.cluster_alb_dns_name
+  ingress_alb_zone = data.terraform_remote_state.eks-addons.outputs.cluster_alb_zone_id
 }
 
 resource "aws_route53_zone" "private" {

@@ -29,7 +29,7 @@ variable "base_domain" {
 }
 
 variable "gitlab_argo_repo" {
-  description = "GitLab repository URL for ArgoCD"
+  description = "GitLab repository Name for ArgoCD"
   type        = string
 }
 
@@ -49,10 +49,4 @@ variable "cluster_alb_name" {
   description = "Optional shared ALB name for ownership manifest"
   type        = string
   default     = ""
-}
-
-variable "deploy_addons" {
-  description = "Set true to deploy Helm/Kubernetes add-ons once the cluster exists"
-  type        = bool
-  default     = false
 }

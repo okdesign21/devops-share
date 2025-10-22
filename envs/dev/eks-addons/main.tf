@@ -8,23 +8,20 @@ locals {
   alb_group_name   = "${var.env}-shared-alb"
   alb_role_name    = "${local.cluster_name}-alb-controller"
   oidc_provider_id = replace(local.cluster_oidc_issuer_url, "https://", "")
+  argo_repo = "http://gitlab.${var.env}.${var.base_domain}/${var.gitlab_argo_repo}"
 }
 
 resource "aws_iam_policy" "alb_controller" {
-  count = var.deploy_addons ? 1 : 0
-
   name        = "${local.alb_role_name}-policy"
   path        = "/"
   description = "IAM policy for AWS Load Balancer Controller"
 
-  policy = file("${path.module}/../eks/iam-policy-alb.json")
+  policy = file("${path.module}/iam-policy-alb.json")
 
   tags = local.tags
 }
 
 resource "aws_iam_role" "alb_controller" {
-  count = var.deploy_addons ? 1 : 0
-
   name = local.alb_role_name
 
   assume_role_policy = jsonencode({
@@ -48,15 +45,11 @@ resource "aws_iam_role" "alb_controller" {
 }
 
 resource "aws_iam_role_policy_attachment" "alb_controller" {
-  count = var.deploy_addons ? 1 : 0
-
-  role       = aws_iam_role.alb_controller[count.index].name
-  policy_arn = aws_iam_policy.alb_controller[count.index].arn
+  role       = aws_iam_role.alb_controller.name
+  policy_arn = aws_iam_policy.alb_controller.arn
 }
 
 resource "helm_release" "aws_lb_controller" {
-  count = var.deploy_addons ? 1 : 0
-
   name       = "aws-load-balancer-controller"
   repository = "https://aws.github.io/eks-charts"
   chart      = "aws-load-balancer-controller"
@@ -78,7 +71,7 @@ resource "helm_release" "aws_lb_controller" {
     },
     {
       name  = "serviceAccount.annotations.eks.amazonaws.com/role-arn"
-      value = aws_iam_role.alb_controller[count.index].arn
+      value = aws_iam_role.alb_controller.arn
     }
   ]
 
@@ -86,20 +79,16 @@ resource "helm_release" "aws_lb_controller" {
 }
 
 resource "kubernetes_namespace" "argocd" {
-  count = var.deploy_addons ? 1 : 0
-
   metadata {
     name = "argocd"
   }
 }
 
 resource "helm_release" "argo_cd" {
-  count = var.deploy_addons ? 1 : 0
-
   name       = "argocd"
   repository = "https://argoproj.github.io/argo-helm"
   chart      = "argo-cd"
-  namespace  = kubernetes_namespace.argocd[count.index].metadata[0].name
+  namespace  = kubernetes_namespace.argocd.metadata[0].name
   version    = var.argocd_chart_version
 
   values = [
@@ -117,11 +106,9 @@ resource "helm_release" "argo_cd" {
 }
 
 resource "kubernetes_secret" "argocd_gitlab_repo" {
-  count = var.deploy_addons ? 1 : 0
-
   metadata {
     name      = "gitlab-argo-repo"
-    namespace = kubernetes_namespace.argocd[count.index].metadata[0].name
+    namespace = kubernetes_namespace.argocd.metadata[0].name
     labels = {
       "argocd.argoproj.io/secret-type" = "repository"
     }
@@ -129,7 +116,7 @@ resource "kubernetes_secret" "argocd_gitlab_repo" {
 
   data = {
     type     = base64encode("git")
-    url      = base64encode(var.gitlab_argo_repo)
+    url      = base64encode(local.argo_repo)
     password = base64encode(var.gitlab_argo_token)
     username = base64encode("git")
   }
@@ -138,7 +125,7 @@ resource "kubernetes_secret" "argocd_gitlab_repo" {
 }
 
 resource "kubernetes_manifest" "shared_alb_owner" {
-  count = (var.deploy_addons && var.cluster_alb_name != "") ? 1 : 0
+  count = (var.cluster_alb_name != "") ? 1 : 0
 
   manifest = yamldecode(
     templatefile("${path.module}/kube-manifests/shared-alb-owner.yaml", {

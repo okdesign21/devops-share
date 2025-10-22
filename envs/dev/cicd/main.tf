@@ -259,9 +259,9 @@ module "ud_jenkins_agent" {
     "${path.module}/../../../modules/userdata/common/ssm.sh",
     "${path.module}/../../../modules/userdata/common/docker.sh",
     "${path.module}/../../../modules/userdata/compose/jenkins_agent.sh",
-    templatefile("../../../modules/userdata/templates/jenkins_agnt_env.tpl", 
-    {
-      jenkins_url     = local.jenkins_url
+    templatefile("../../../modules/userdata/templates/jenkins_agnt_env.tpl",
+      {
+        jenkins_url = local.jenkins_url
     })
   ]
 }

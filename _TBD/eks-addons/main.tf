@@ -6,9 +6,10 @@ locals {
   }
 
   alb_group_name   = "${var.env}-shared-alb"
+  cluster_alb_name = "${var.env}-shared-alb"
   alb_role_name    = "${local.cluster_name}-alb-controller"
   oidc_provider_id = replace(local.cluster_oidc_issuer_url, "https://", "")
-  argo_repo = "http://gitlab.${var.env}.${var.base_domain}/${var.gitlab_argo_repo}"
+  argo_repo        = "http://gitlab.${var.env}.${var.base_domain}/${var.gitlab_argo_repo}"
 }
 
 resource "aws_iam_policy" "alb_controller" {
@@ -95,12 +96,28 @@ resource "helm_release" "argo_cd" {
     templatefile("${path.module}/kube-manifests/argocd-values.tpl", {
       base_domain      = var.base_domain
       env              = var.env
-      cluster_alb_name = var.cluster_alb_name != "" ? var.cluster_alb_name : local.alb_group_name
+      cluster_alb_name = local.cluster_alb_name
     })
   ]
 
   depends_on = [
     kubernetes_namespace.argocd,
+    helm_release.aws_lb_controller
+  ]
+}
+
+data "external" "wait_for_alb" {
+  program = ["bash", "${path.module}/scripts/wait_for_alb.sh"]
+
+  query = {
+    alb_name = local.cluster_alb_name
+    timeout  = var.alb_wait_timeout
+    interval = var.alb_wait_interval
+    region   = var.region
+  }
+
+  depends_on = [
+    helm_release.argo_cd,
     helm_release.aws_lb_controller
   ]
 }
@@ -125,11 +142,11 @@ resource "kubernetes_secret" "argocd_gitlab_repo" {
 }
 
 resource "kubernetes_manifest" "shared_alb_owner" {
-  count = (var.cluster_alb_name != "") ? 1 : 0
+  count = (local.cluster_alb_name != "") ? 1 : 0
 
   manifest = yamldecode(
     templatefile("${path.module}/kube-manifests/shared-alb-owner.yaml", {
-      cluster_alb_name = var.cluster_alb_name
+      cluster_alb_name = local.cluster_alb_name
       alb_group_name   = local.alb_group_name
       env              = var.env
     })

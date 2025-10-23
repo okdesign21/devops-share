@@ -36,7 +36,10 @@ resource "aws_eks_cluster" "main" {
 
   tags = merge(local.tags, { Name = local.cluster_name })
 
-  depends_on = [aws_iam_role.cluster]
+  depends_on = [
+    aws_iam_role_policy_attachment.cluster_policy,
+    aws_iam_role_policy_attachment.cluster_vpc_resource_controller
+  ]
 }
 
 # Cluster IAM role
@@ -55,6 +58,16 @@ resource "aws_iam_role" "cluster" {
   name               = "${var.project_name}-${var.env}-eks-cluster-role"
   assume_role_policy = data.aws_iam_policy_document.cluster_assume_role.json
   tags               = local.tags
+}
+
+resource "aws_iam_role_policy_attachment" "cluster_policy" {
+  role       = aws_iam_role.cluster.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy"
+}
+
+resource "aws_iam_role_policy_attachment" "cluster_vpc_resource_controller" {
+  role       = aws_iam_role.cluster.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSVPCResourceController"
 }
 
 # OIDC provider for IRSA
@@ -134,6 +147,10 @@ resource "aws_eks_node_group" "main" {
     max_size     = var.max_size
   }
 
+  update_config {
+    max_unavailable = 1
+  }
+
   instance_types = var.node_instance_types
   capacity_type  = "ON_DEMAND"
 
@@ -147,31 +164,84 @@ resource "aws_eks_node_group" "main" {
 
   lifecycle {
     create_before_destroy = true
+    ignore_changes        = [scaling_config[0].desired_size]
   }
 
-  depends_on = [aws_eks_cluster.main]
+  depends_on = [
+    aws_eks_cluster.main,
+    aws_iam_role_policy_attachment.node_worker_attach,
+    aws_iam_role_policy_attachment.node_cni_attach,
+    aws_iam_role_policy_attachment.node_ecr_attach
+  ]
 }
 
 # Add-ons
 resource "aws_eks_addon" "vpc_cni" {
   cluster_name                = aws_eks_cluster.main.name
   addon_name                  = "vpc-cni"
+  resolve_conflicts_on_create = "OVERWRITE"
   resolve_conflicts_on_update = "PRESERVE"
   tags                        = local.tags
+
+  depends_on = [
+    aws_eks_cluster.main,
+    aws_iam_role_policy_attachment.node_cni_attach
+  ]
 }
 
 resource "aws_eks_addon" "kube_proxy" {
   cluster_name                = aws_eks_cluster.main.name
   addon_name                  = "kube-proxy"
+  resolve_conflicts_on_create = "OVERWRITE"
   resolve_conflicts_on_update = "PRESERVE"
   tags                        = local.tags
+
+  depends_on = [aws_eks_addon.vpc_cni]
 }
 
 resource "aws_eks_addon" "coredns" {
   cluster_name                = aws_eks_cluster.main.name
   addon_name                  = "coredns"
+  resolve_conflicts_on_create = "OVERWRITE"
   resolve_conflicts_on_update = "PRESERVE"
   tags                        = local.tags
 
-  depends_on = [aws_eks_node_group.main]
+  depends_on = [
+    aws_eks_node_group.main,
+    aws_eks_addon.vpc_cni
+  ]
+}
+
+locals {
+  all_subnet_ids = concat(
+    data.terraform_remote_state.network.outputs.public_subnet_ids,
+    data.terraform_remote_state.network.outputs.private_subnet_ids
+  )
+}
+
+# Tag all subnets for cluster discovery
+resource "aws_ec2_tag" "cluster_subnets" {
+  for_each = toset(local.all_subnet_ids)
+
+  resource_id = each.value
+  key         = "kubernetes.io/cluster/${aws_eks_cluster.main.name}"
+  value       = "shared"
+}
+
+# Tag only public subnets for internet-facing ALBs
+resource "aws_ec2_tag" "public_elb" {
+  for_each = toset(data.terraform_remote_state.network.outputs.public_subnet_ids)
+
+  resource_id = each.value
+  key         = "kubernetes.io/role/elb"
+  value       = "1"
+}
+
+# Tag only private subnets for internal ALBs
+resource "aws_ec2_tag" "private_elb" {
+  for_each = toset(data.terraform_remote_state.network.outputs.private_subnet_ids)
+
+  resource_id = each.value
+  key         = "kubernetes.io/role/internal-elb"
+  value       = "1"
 }

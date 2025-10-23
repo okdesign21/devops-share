@@ -1,7 +1,7 @@
 variable "cluster_version" {
   type        = string
   description = "Kubernetes version"
-  default     = "1.33"
+  default     = "1.34"
 }
 
 variable "min_size" {

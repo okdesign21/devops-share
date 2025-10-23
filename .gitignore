@@ -52,4 +52,5 @@ secrets.*
 # VSCode
 .vscode/
 .idea/
-TODO
+*.code-workspace
+TODO.txt

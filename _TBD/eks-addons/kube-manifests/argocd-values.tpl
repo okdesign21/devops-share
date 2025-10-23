@@ -9,6 +9,7 @@ server:
     ingressClassName: "alb"
     annotations:
       alb.ingress.kubernetes.io/group.name: "${cluster_alb_name}"
+      alb.ingress.kubernetes.io/load-balancer-name: "${cluster_alb_name}"
       alb.ingress.kubernetes.io/scheme: "internet-facing"
       alb.ingress.kubernetes.io/target-type: "ip"
       alb.ingress.kubernetes.io/healthcheck-path: "/healthz"

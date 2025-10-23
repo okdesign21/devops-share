@@ -8,11 +8,6 @@ variable "state_bucket" {
   type        = string
 }
 
-variable "state_prefix" {
-  description = "Prefix within the state bucket"
-  type        = string
-}
-
 variable "env" {
   description = "Environment name"
   type        = string
@@ -45,8 +40,14 @@ variable "argocd_chart_version" {
   default     = "7.6.12"
 }
 
-variable "cluster_alb_name" {
-  description = "Optional shared ALB name for ownership manifest"
-  type        = string
-  default     = ""
+variable "alb_wait_timeout" {
+  description = "Seconds to wait for ALB creation"
+  type        = number
+  default     = 600
+}
+
+variable "alb_wait_interval" {
+  description = "Polling interval seconds for ALB creation"
+  type        = number
+  default     = 5
 }

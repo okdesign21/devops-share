@@ -19,11 +19,11 @@ output "helm_aws_lb_controller_version" {
 }
 
 output "cluster_alb_dns_name" {
-  description = "DNS name of the ALB created by the AWS Load Balancer Controller"
-  value       = helm_release.aws_lb_controller.status[0].load_balancer[0].ingress[0].hostname
+  description = "DNS name of the ALB created by the AWS Load Balancer Controller (available after ingress is provisioned)"
+  value       = try(data.external.wait_for_alb.result.dns, "")
 }
 
 output "cluster_alb_zone_id" {
-  description = "Zone ID of the ALB created by the AWS Load Balancer Controller"
-  value       = helm_release.aws_lb_controller.status[0].load_balancer[0].ingress[0].zone_id
+  description = "Zone ID of the ALB created by the AWS Load Balancer Controller (available after ingress is provisioned)"
+  value       = try(data.external.wait_for_alb.result.zone_id, "")
 }

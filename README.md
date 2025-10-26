@@ -136,7 +136,3 @@ This README keeps the essentials front and centre so you can bootstrap, iterate,
   network --> eks
   cicd --> dns
   eks --> dns
-
-# For Argo
-export DEV_ALB=$(aws iam get-role --role-name irsa-alb-controller-dev --query 'Role.Arn' --output text)
-export DEV_DNS=$(aws iam get-role --role-name irsa-external-dns-dev --query 'Role.Arn' --output text)

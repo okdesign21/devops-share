@@ -72,8 +72,8 @@ locals {
     (length(data.aws_ami.jenkins_lookup) > 0 ? data.aws_ami.jenkins_lookup[0].id : "")
   )
 
-  gitlab_host  = "gitlab.${var.env}.${var.base_domain}"
-  jenkins_host = "jenkins.${var.env}.${var.base_domain}"
+  gitlab_host  = "gitlab.${var.env}.r53.${var.base_domain}"
+  jenkins_host = "jenkins.${var.env}.r53.${var.base_domain}"
 
   gitlab_url  = "${var.gitlab_protocol}://${local.gitlab_host}"
   jenkins_url = "${var.jenkins_protocol}://${local.jenkins_host}"

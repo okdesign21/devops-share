@@ -126,3 +126,29 @@ resource "aws_iam_role_policy_attachment" "external_dns_attach" {
   role       = aws_iam_role.external_dns.name
   policy_arn = aws_iam_policy.external_dns.arn
 }
+
+data "terraform_remote_state" "cicd" {
+  backend = "s3"
+  config = {
+    bucket = var.state_bucket
+    key    = "${var.project_name}/${var.env}/cicd/terraform.tfstate"
+    region = var.region
+  }
+}
+
+# Create Route53 records for Jenkins and GitLab pointing to CICD ALB
+resource "aws_route53_record" "jenkins_r53" {
+  zone_id = aws_route53_zone.r53[0].zone_id
+  name    = "jenkins.${local.env_fqdn_r53_base}"
+  type    = "CNAME"
+  ttl     = 300
+  records = [data.terraform_remote_state.cicd.outputs.cicd_alb_dns]
+}
+
+resource "aws_route53_record" "gitlab_r53" {
+  zone_id = aws_route53_zone.r53[0].zone_id
+  name    = "gitlab.${local.env_fqdn_r53_base}"
+  type    = "CNAME"
+  ttl     = 300
+  records = [data.terraform_remote_state.cicd.outputs.cicd_alb_dns]
+}

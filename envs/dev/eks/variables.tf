@@ -62,3 +62,34 @@ variable "lab_ip" {
   type        = string
   description = "Lab IP for API access"
 }
+
+variable "repo_url" {
+  type        = string
+  description = "ArgoCD Git repository URL"
+  default     = ""
+}
+
+variable "repo_username" {
+  type        = string
+  description = "ArgoCD Git repository username"
+  default     = "git"
+}
+
+variable "repo_password" {
+  type        = string
+  description = "ArgoCD Git repository password/token"
+  sensitive   = true
+  default     = ""
+}
+
+variable "base_domain" {
+  type        = string
+  description = "Base domain for ArgoCD repository URL"
+  default     = "infinity.ortflix.uk"
+}
+
+variable "gitlab_argo_repo" {
+  type        = string
+  description = "GitLab ArgoCD repository path (owner/repo.git)"
+  default     = ""
+}

@@ -40,3 +40,8 @@ output "oidc_provider_arn" {
   description = "IAM OIDC provider ARN used for IRSA"
   value       = aws_iam_openid_connect_provider.cluster.arn
 }
+
+output "alb_controller_role_arn" {
+  description = "IAM role ARN for AWS Load Balancer Controller IRSA"
+  value       = aws_iam_role.alb_controller.arn
+}

@@ -2,10 +2,13 @@
 ENV            ?= dev
 PROJECT_NAME   ?= proj
 STACK          ?= all
-STACKS         := network cicd eks eks-addons dns
+DEV_STACKS         := network cicd eks argo dns
+PROD_STACKS        := network eks dns
+STAGGED_STACKS     := network eks dns
+STACKS         := $(if $(filter prod,$(ENV)),$(PROD_STACKS),$(if $(filter stagged,$(ENV)),$(STAGGED_STACKS),$(DEV_STACKS)))
 
 BACKEND_FILE   := ../../backend.hcl
-COMMON_VARS    := ../../common.tfvars
+COMMON_VARS    := ../$(ENV)-common.tfvars
 
 # If STACK=all -> use STACKS; else -> just the specific stack
 STACK_LIST     := $(if $(filter all,$(STACK)),$(STACKS),$(STACK))
@@ -63,7 +66,3 @@ show:
 		echo "== terraform show $$s (ENV=$(ENV)) =="; \
 		terraform -chdir=envs/$(ENV)/$$s show || true; \
 	done
-
-# Aliases
-apply-all: ; @$(MAKE) apply STACK=all ENV=$(ENV)
-destroy-all: ; @$(MAKE) destroy STACK=all ENV=$(ENV)

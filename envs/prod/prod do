@@ -1,5 +1,0 @@
-env = "prod"
-create network
-create cluster (eks)
-create eks-addons
-create dns > cluster only

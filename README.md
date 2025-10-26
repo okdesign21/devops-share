@@ -130,3 +130,13 @@ After importing, run `terraform plan` to confirm a clean state. Adjust resource 
 - Automate common imports (key pairs, IAM roles) via scripts if drift recurs.
 
 This README keeps the essentials front and centre so you can bootstrap, iterate, and tear down the dev environment quickly. Reach out to update it whenever the provisioning flow changes.
+
+## Stack Dependencies
+  network --> cicd
+  network --> eks
+  cicd --> dns
+  eks --> dns
+
+# For Argo
+export DEV_ALB=$(aws iam get-role --role-name irsa-alb-controller-dev --query 'Role.Arn' --output text)
+export DEV_DNS=$(aws iam get-role --role-name irsa-external-dns-dev --query 'Role.Arn' --output text)

@@ -11,6 +11,7 @@ locals {
   vpc_id             = data.terraform_remote_state.network.outputs.vpc_id
   private_subnet_ids = data.terraform_remote_state.network.outputs.private_subnet_ids
   cluster_name       = "${var.project_name}-${var.env}-cluster"
+  dev_nat_ip         = "${data.terraform_remote_state.network.outputs.nat_instance_public_ip}/32"
 
   tags = {
     Environment = var.env
@@ -29,7 +30,7 @@ resource "aws_eks_cluster" "main" {
     subnet_ids              = local.private_subnet_ids
     endpoint_private_access = true
     endpoint_public_access  = true
-    public_access_cidrs     = [var.home_ip, var.lab_ip]
+    public_access_cidrs     = [var.home_ip, var.lab_ip, local.dev_nat_ip]
   }
 
   enabled_cluster_log_types = ["api", "audit", "authenticator", "controllerManager", "scheduler"]
@@ -244,4 +245,49 @@ resource "aws_ec2_tag" "private_elb" {
   resource_id = each.value
   key         = "kubernetes.io/role/internal-elb"
   value       = "1"
+}
+
+#########################################################
+# AWS Load Balancer Controller IRSA
+#########################################################
+
+# OIDC trust policy for ALB controller service account
+data "aws_iam_policy_document" "alb_controller_oidc_trust" {
+  statement {
+    effect = "Allow"
+    principals {
+      type        = "Federated"
+      identifiers = [aws_iam_openid_connect_provider.cluster.arn]
+    }
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+    condition {
+      test     = "StringEquals"
+      variable = "${replace(aws_eks_cluster.main.identity[0].oidc[0].issuer, "https://", "")}:sub"
+      values   = ["system:serviceaccount:kube-system:aws-load-balancer-controller"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "${replace(aws_eks_cluster.main.identity[0].oidc[0].issuer, "https://", "")}:aud"
+      values   = ["sts.amazonaws.com"]
+    }
+  }
+}
+
+# IAM policy for ALB controller (loaded from JSON file)
+resource "aws_iam_policy" "alb_controller" {
+  name        = "alb-controller-${var.env}"
+  description = "AWS Load Balancer Controller IAM policy (${var.env})"
+  policy      = file("${path.module}/iam-policy-alb.json")
+}
+
+# IAM role for ALB controller
+resource "aws_iam_role" "alb_controller" {
+  name               = "irsa-alb-controller-${var.env}"
+  assume_role_policy = data.aws_iam_policy_document.alb_controller_oidc_trust.json
+  tags               = local.tags
+}
+
+resource "aws_iam_role_policy_attachment" "alb_controller_attach" {
+  role       = aws_iam_role.alb_controller.name
+  policy_arn = aws_iam_policy.alb_controller.arn
 }

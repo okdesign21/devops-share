@@ -32,3 +32,7 @@ output "ssm_instance_profile_name" {
 output "private_subnet_cidrs" {
   value = try(local.private_cidrs, null)
 }
+
+output "nat_instance_public_ip" {
+  value = module.nat_instance.public_ip
+}

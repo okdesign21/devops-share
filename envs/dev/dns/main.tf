@@ -148,7 +148,7 @@ resource "aws_iam_role_policy_attachment" "external_dns_attach" {
 
 variable "app_hosts" {
   type    = list(string)
-  default = ["weather", "gitlab", "jenkins"]
+  default = ["weather","prom","gitlab", "jenkins"]
 }
 
 # Create Cloudflare DNS records for apps in the env subdomain pointing to R53 subdomain

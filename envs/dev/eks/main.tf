@@ -291,3 +291,22 @@ resource "aws_iam_role_policy_attachment" "alb_controller_attach" {
   role       = aws_iam_role.alb_controller.name
   policy_arn = aws_iam_policy.alb_controller.arn
 }
+
+#########################################################
+# Automatic kubectl configuration
+#########################################################
+
+resource "null_resource" "update_kubeconfig" {
+  triggers = {
+    cluster_id = aws_eks_cluster.main.id
+  }
+
+  provisioner "local-exec" {
+    command = "aws eks update-kubeconfig --name ${aws_eks_cluster.main.name} --region ${var.region}"
+  }
+
+  depends_on = [
+    aws_eks_cluster.main,
+    aws_eks_node_group.main
+  ]
+}

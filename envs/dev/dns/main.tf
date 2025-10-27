@@ -88,7 +88,12 @@ data "aws_iam_policy_document" "oidc_trust" {
     condition {
       test     = "StringEquals"
       variable = "${replace(local.eks_oidc_issuer_url, "https://", "")}:sub"
-      values   = ["system:serviceaccount:kube-system:external-dns"]
+      values   = ["system:serviceaccount:external-dns:external-dns"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "${replace(local.eks_oidc_issuer_url, "https://", "")}:aud"
+      values   = ["sts.amazonaws.com"]
     }
   }
 }

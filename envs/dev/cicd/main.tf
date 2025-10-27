@@ -183,7 +183,7 @@ module "alb" {
 
   routes = concat(
     [
-      { name = "jenkins", header = local.jenkins_host, port = var.jenkins_port, health_path = "/-/login", priority = 10 },
+      { name = "jenkins", header = local.jenkins_host, port = var.jenkins_port, health_path = "/login", priority = 10 },
       { name = "gitlab", header = local.gitlab_host, port = var.gitlab_port, health_path = "/gitlab/users/sign_in", priority = 20 }
     ]
   )

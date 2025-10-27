@@ -45,24 +45,38 @@ resource "cloudflare_dns_record" "delegate_r53_subdomain" {
   ttl     = 3600
   proxied = false
 }
+
+data "terraform_remote_state" "cicd" {
+  count   = var.env == "dev" ? 1 : 0
+  backend = "s3"
+  config = {
+    bucket = var.state_bucket
+    key    = "${var.project_name}/${var.env}/cicd/terraform.tfstate"
+    region = var.region
+  }
+}
+
+# Create Route53 records for Jenkins and GitLab pointing to CICD ALB
+resource "aws_route53_record" "jenkins_r53" {
+  count   = var.env == "dev" ? 1 : 0
+  zone_id = aws_route53_zone.r53[0].zone_id
+  name    = "jenkins.${local.env_fqdn_r53_base}"
+  type    = "CNAME"
+  ttl     = 300
+  records = [data.terraform_remote_state.cicd[0].outputs.cicd_alb_dns]
+}
+
+resource "aws_route53_record" "gitlab_r53" {
+  count   = var.env == "dev" ? 1 : 0
+  zone_id = aws_route53_zone.r53[0].zone_id
+  name    = "gitlab.${local.env_fqdn_r53_base}"
+  type    = "CNAME"
+  ttl     = 300
+  records = [data.terraform_remote_state.cicd[0].outputs.cicd_alb_dns]
+}
 #######################################################
 
-variable "app_hosts" {
-  type    = list(string)
-  default = ["app", "gitlab", "jenkins"]
-}
-
-resource "cloudflare_dns_record" "apps_env_cnames" {
-  for_each = toset(var.app_hosts)
-
-  zone_id = local.cf_zone_id
-  name    = "${each.key}.${var.env}.${var.base_domain}"
-  type    = "CNAME"
-  content = "${each.key}.${local.env_fqdn_r53_base}"
-  ttl     = 120
-  proxied = false
-}
-
+# IAM Role and Policy for ExternalDNS (IRSA)
 data "aws_iam_policy_document" "oidc_trust" {
   statement {
     effect = "Allow"
@@ -127,28 +141,19 @@ resource "aws_iam_role_policy_attachment" "external_dns_attach" {
   policy_arn = aws_iam_policy.external_dns.arn
 }
 
-data "terraform_remote_state" "cicd" {
-  backend = "s3"
-  config = {
-    bucket = var.state_bucket
-    key    = "${var.project_name}/${var.env}/cicd/terraform.tfstate"
-    region = var.region
-  }
+variable "app_hosts" {
+  type    = list(string)
+  default = ["weather", "gitlab", "jenkins"]
 }
 
-# Create Route53 records for Jenkins and GitLab pointing to CICD ALB
-resource "aws_route53_record" "jenkins_r53" {
-  zone_id = aws_route53_zone.r53[0].zone_id
-  name    = "jenkins.${local.env_fqdn_r53_base}"
-  type    = "CNAME"
-  ttl     = 300
-  records = [data.terraform_remote_state.cicd.outputs.cicd_alb_dns]
-}
+# Create Cloudflare DNS records for apps in the env subdomain pointing to R53 subdomain
+resource "cloudflare_dns_record" "apps_env_cnames" {
+  for_each = toset(var.app_hosts)
 
-resource "aws_route53_record" "gitlab_r53" {
-  zone_id = aws_route53_zone.r53[0].zone_id
-  name    = "gitlab.${local.env_fqdn_r53_base}"
+  zone_id = local.cf_zone_id
+  name    = "${each.key}.${var.env}.${var.base_domain}"
   type    = "CNAME"
-  ttl     = 300
-  records = [data.terraform_remote_state.cicd.outputs.cicd_alb_dns]
+  content = "${each.key}.${local.env_fqdn_r53_base}"
+  ttl     = 120
+  proxied = false
 }

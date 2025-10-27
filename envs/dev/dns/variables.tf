@@ -25,8 +25,7 @@ variable "zone_name" {
 
 variable "cloudflare_api_token" {
   type        = string
-  description = "Cloudflare API token (optional; will fallback to CLOUDFLARE_API_TOKEN env var)"
-  default     = ""
+  description = "Cloudflare API token"
 }
 
 variable "project_name" {

@@ -31,6 +31,7 @@ services:
         gitlab_rails['trusted_proxies']    = ${GITLAB_TRUSTED_CIDRS_ARRAY}
 
         gitlab_rails['gitlab_shell_ssh_port'] = 2222
+        gitlab_rails['gitlab_ssh_host'] = ${GITLAB_HOST}
         gitlab_rails['allow_local_requests_from_web_hooks_and_services'] = true
         gitlab_rails['allow_local_requests_from_system_hooks'] = true
 

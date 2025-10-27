@@ -72,8 +72,13 @@ locals {
     (length(data.aws_ami.jenkins_lookup) > 0 ? data.aws_ami.jenkins_lookup[0].id : "")
   )
 
-  gitlab_host  = "gitlab.${var.env}.r53.${var.base_domain}"
-  jenkins_host = "jenkins.${var.env}.r53.${var.base_domain}"
+  # Main domain hosts (used for user access and ALB routing)
+  gitlab_host  = "gitlab.${var.env}.${var.base_domain}"
+  jenkins_host = "jenkins.${var.env}.${var.base_domain}"
+
+  # R53 subdomain hosts (actual DNS records pointing to ALB)
+  gitlab_host_r53  = "gitlab.${var.env}.r53.${var.base_domain}"
+  jenkins_host_r53 = "jenkins.${var.env}.r53.${var.base_domain}"
 
   gitlab_url  = "${var.gitlab_protocol}://${local.gitlab_host}"
   jenkins_url = "${var.jenkins_protocol}://${local.jenkins_host}"
@@ -183,8 +188,20 @@ module "alb" {
 
   routes = concat(
     [
-      { name = "jenkins", header = local.jenkins_host, port = var.jenkins_port, health_path = "/login", priority = 10 },
-      { name = "gitlab", header = local.gitlab_host, port = var.gitlab_port, health_path = "/gitlab/users/sign_in", priority = 20 }
+      { 
+        name        = "jenkins"
+        headers     = [local.jenkins_host, local.jenkins_host_r53]
+        port        = var.jenkins_port
+        health_path = "/login"
+        priority    = 10
+      },
+      { 
+        name        = "gitlab"
+        headers     = [local.gitlab_host, local.gitlab_host_r53]
+        port        = var.gitlab_port
+        health_path = "/gitlab/users/sign_in"
+        priority    = 20
+      }
     ]
   )
 }
@@ -229,6 +246,7 @@ module "ud_gitlab" {
       external_url  = local.gitlab_url
       trusted_cidrs = local.gitlab_trusted_cidrs
       trusted_array = local.gitlab_trusted_array
+      gitlab_host   = local.gitlab_host
     })
   ]
 }

@@ -2,6 +2,13 @@ locals {
   routes_by_name   = { for r in var.routes : r.name => r }
   route_names      = keys(local.routes_by_name)
   computed_default = coalesce(var.default_tg_name, try(local.route_names[0], null))
+  
+  # Normalize routes to always use headers list (support both header and headers)
+  normalized_routes = {
+    for k, v in local.routes_by_name : k => merge(v, {
+      host_headers = v.headers != null ? v.headers : (v.header != null ? [v.header] : [])
+    })
+  }
 }
 
 resource "aws_lb" "this" {
@@ -38,7 +45,7 @@ resource "aws_lb_target_group" "tgs" {
 }
 
 resource "aws_lb_listener_rule" "rules" {
-  for_each     = local.computed_default != null ? local.routes_by_name : {}
+  for_each     = local.computed_default != null ? local.normalized_routes : {}
   listener_arn = aws_lb_listener.http[0].arn
   priority     = each.value.priority
 
@@ -49,7 +56,7 @@ resource "aws_lb_listener_rule" "rules" {
 
   condition {
     host_header {
-      values = [each.value.header]
+      values = each.value.host_headers
     }
   }
 }

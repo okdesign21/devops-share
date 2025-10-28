@@ -25,7 +25,7 @@ variable "desired_size" {
 variable "node_instance_types" {
   type        = list(string)
   description = "EC2 instance types for nodes"
-  default     = ["t3.small", "m7i-flex.large"]
+  default     = ["m7i-flex.large"]
 }
 
 variable "node_instance_size" {

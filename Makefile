@@ -2,7 +2,7 @@
 ENV            ?= dev
 PROJECT_NAME   ?= proj
 STACK          ?= all
-DEV_STACKS         := network cicd eks dns #argo
+DEV_STACKS         := network cicd eks dns
 PROD_STACKS        := network eks dns
 STAGGED_STACKS     := network eks dns
 STACKS         := $(if $(filter prod,$(ENV)),$(PROD_STACKS),$(if $(filter stagged,$(ENV)),$(STAGGED_STACKS),$(DEV_STACKS)))
@@ -15,7 +15,7 @@ STACK_LIST     := $(if $(filter all,$(STACK)),$(STACKS),$(STACK))
 # Reverse order for destroy-all
 REVERSE_STACKS := $(if $(filter all,$(STACK)),$(shell echo $(STACKS) | awk '{for(i=NF;i>=1;i--) printf "%s ", $$i}'),$(STACK))
 
-.PHONY: init plan apply destroy output validate fmt apply-all destroy-all show
+.PHONY: init plan apply destroy output validate fmt show
 
 init:
 	@for s in $(STACK_LIST) ; do \

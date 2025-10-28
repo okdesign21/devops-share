@@ -88,6 +88,53 @@ Run the second step only after the cluster reports `ACTIVE`. Keeping Helm/Kubern
 
 ---
 
+## Destroying the Environment
+
+### Prerequisites
+
+**Before running Terraform destroy**, clean up Kubernetes resources that create AWS dependencies:
+
+1. Clone the ArgoCD repository
+2. Run the pre-destroy script:
+   ```bash
+   cd /path/to/argocd-repo
+   ./scripts/pre-destroy.sh proj-dev-cluster eu-central-1 argocd
+   ```
+3. Wait for completion (~5 minutes)
+
+### Destroy Sequence
+
+```bash
+# After running pre-destroy.sh:
+make destroy ENV=dev STACK=dns      # Now safe - Route53 records cleaned
+make destroy ENV=dev STACK=eks      # EKS cluster + node groups
+make destroy ENV=dev STACK=cicd     # Jenkins/GitLab instances
+make destroy ENV=dev STACK=network  # VPC and NAT instance
+```
+
+### Emergency Manual Cleanup
+
+If destroy still fails:
+
+1. **Check for orphaned LoadBalancers:**
+   ```bash
+   aws elbv2 describe-load-balancers --query 'LoadBalancers[?VpcId==`vpc-xxxxx`]'
+   ```
+
+2. **Force delete Route53 records:**
+   ```bash
+   python3 scripts/delete-route53-records.py dev.r53.infinity.ortflix.uk
+   ```
+
+3. **Remove dangling ENIs:**
+   ```bash
+   aws ec2 describe-network-interfaces --filters Name=vpc-id,Values=vpc-xxxxx \
+     --query 'NetworkInterfaces[?Status==`available`].NetworkInterfaceId' | \
+     xargs -n1 aws ec2 delete-network-interface --network-interface-id
+   ```
+
+---
+
 ## Handling Existing Resources
 
 If an AWS resource already exists (for example `proj-key` or `proj-ssm-ec2-role`), import it instead of deleting it:

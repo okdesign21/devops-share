@@ -57,3 +57,9 @@ variable "project_name" {
   type        = string
   description = "Project name"
 }
+
+variable "ssm_access" {
+  type        = string
+  description = "SSM access level (devs, admins, none)"
+  default     = "none"
+}

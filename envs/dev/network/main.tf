@@ -25,6 +25,122 @@ resource "aws_iam_instance_profile" "ssm" {
   role = aws_iam_role.ssm_ec2.name
 }
 
+#########################################################
+# SSM Access Control for "Devs" Group
+#########################################################
+
+# Get "Devs" group by name
+data "aws_iam_group" "devs" {
+  group_name = "Devs"
+}
+
+# IAM policy for SSM access to all project instances
+resource "aws_iam_policy" "ssm_access" {
+  name        = "ssm-access-${var.project_name}-${var.env}"
+  description = "Allow SSM access to all project instances for Devs group"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ssm:StartSession"
+        ]
+        Resource = [
+          "arn:aws:ec2:${var.region}:*:instance/*"
+        ]
+        Condition = {
+          StringEquals = {
+            "ssm:resourceTag/Project"     = var.project_name
+            "ssm:resourceTag/Environment" = var.env
+          }
+        }
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "ssm:StartSession"
+        ]
+        Resource = [
+          "arn:aws:ssm:*:*:document/AWS-StartPortForwardingSession"
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "ssm:TerminateSession",
+          "ssm:ResumeSession"
+        ]
+        Resource = [
+          "arn:aws:ssm:*:*:session/$${aws:userid}-*"
+        ]
+      }
+    ]
+  })
+
+  tags = {
+    Name        = "ssm-access-${var.project_name}-${var.env}"
+    Purpose     = "DevOps team SSM access to all instances"
+    Environment = var.env
+    Project     = var.project_name
+    ManagedBy   = "Terraform"
+  }
+}
+
+# Attach SSM policy to "Devs" group
+resource "aws_iam_group_policy_attachment" "devs_ssm_access" {
+  group      = data.aws_iam_group.devs.group_name
+  policy_arn = aws_iam_policy.ssm_access.arn
+}
+
+#########################################################
+# SSM-Only Security Group
+#########################################################
+
+resource "aws_security_group" "ssm_only" {
+  name        = "${var.project_name}-${var.env}-ssm-only-sg"
+  description = "SSM-only access, no inbound internet"
+  vpc_id      = module.vpc.vpc_id
+
+  # No inbound rules - SSM works via outbound connections
+
+  # Allow outbound HTTPS to VPC for AWS API calls
+  egress {
+    description = "HTTPS for AWS APIs and package updates"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # Allow outbound HTTP for package updates
+  egress {
+    description = "HTTP for package updates"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # Allow DNS resolution
+  egress {
+    description = "DNS"
+    from_port   = 53
+    to_port     = 53
+    protocol    = "udp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name        = "${var.project_name}-${var.env}-ssm-only-sg"
+    Purpose     = "SSM-only-access"
+    Environment = var.env
+    Project     = var.project_name
+    ManagedBy   = "Terraform"
+  }
+}
+
 locals {
   cidr_base = lookup({
     dev  = 10
@@ -106,6 +222,7 @@ module "nat_instance" {
   iam_instance_profile     = aws_iam_instance_profile.ssm.name
   project_name             = var.project_name
   env                      = var.env
+  ssm_access               = "devs" # Allow maintenance access via SSM
 }
 
 resource "aws_route" "private_nat" {

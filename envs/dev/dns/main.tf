@@ -7,6 +7,24 @@ data "terraform_remote_state" "eks" {
   }
 }
 
+data "terraform_remote_state" "network" {
+  backend = "s3"
+  config = {
+    bucket = var.state_bucket
+    key    = "${var.project_name}/${var.env}/network/terraform.tfstate"
+    region = var.region
+  }
+}
+
+data "terraform_remote_state" "cicd" {
+  backend = "s3"
+  config = {
+    bucket = var.state_bucket
+    key    = "${var.project_name}/${var.env}/cicd/terraform.tfstate"
+    region = var.region
+  }
+}
+
 data "cloudflare_zones" "this" {
   name = var.zone_name
 }
@@ -46,36 +64,64 @@ resource "cloudflare_dns_record" "delegate_r53_subdomain" {
   proxied = false
 }
 
-data "terraform_remote_state" "cicd" {
-  count   = var.env == "dev" ? 1 : 0
-  backend = "s3"
-  config = {
-    bucket = var.state_bucket
-    key    = "${var.project_name}/${var.env}/cicd/terraform.tfstate"
-    region = var.region
+#########################################################
+# ACM Certificate for Public App (HTTPS)
+#########################################################
+
+# ACM Certificate for the public app
+resource "aws_acm_certificate" "app" {
+  count             = var.env == "dev" ? 1 : 0
+  domain_name       = "app.${var.env}.r53.${var.base_domain}"
+  validation_method = "DNS"
+
+  # Optional: Add SAN for wildcard or additional domains
+  subject_alternative_names = [
+    "*.${var.env}.r53.${var.base_domain}",      # Wildcard for subpaths
+    "weather.${var.env}.r53.${var.base_domain}" # Weather app specifically
+  ]
+
+  lifecycle {
+    create_before_destroy = true
+  }
+
+  tags = {
+    Name        = "app-${var.env}-cert"
+    Purpose     = "Public app HTTPS"
+    Environment = var.env
+    Project     = var.project_name
+    ManagedBy   = "Terraform"
   }
 }
 
-# Create Route53 records for Jenkins and GitLab pointing to CICD ALB
-resource "aws_route53_record" "jenkins_r53" {
-  count   = var.env == "dev" ? 1 : 0
+# Route53 Records for ACM DNS validation
+resource "aws_route53_record" "app_validation" {
+  for_each = var.env == "dev" ? {
+    for dvo in aws_acm_certificate.app[0].domain_validation_options : dvo.domain_name => {
+      name   = dvo.resource_record_name
+      record = dvo.resource_record_value
+      type   = dvo.resource_record_type
+    }
+  } : {}
+
   zone_id = aws_route53_zone.r53[0].zone_id
-  name    = "jenkins.${local.env_fqdn_r53_base}"
-  type    = "CNAME"
-  ttl     = 300
-  records = [data.terraform_remote_state.cicd[0].outputs.cicd_alb_dns]
+  name    = each.value.name
+  type    = each.value.type
+  records = [each.value.record]
+  ttl     = 60
 }
 
-resource "aws_route53_record" "gitlab_r53" {
-  count   = var.env == "dev" ? 1 : 0
-  zone_id = aws_route53_zone.r53[0].zone_id
-  name    = "gitlab.${local.env_fqdn_r53_base}"
-  type    = "CNAME"
-  ttl     = 300
-  records = [data.terraform_remote_state.cicd[0].outputs.cicd_alb_dns]
-}
-#######################################################
+# ACM Certificate validation
+resource "aws_acm_certificate_validation" "app" {
+  count                   = var.env == "dev" ? 1 : 0
+  certificate_arn         = aws_acm_certificate.app[0].arn
+  validation_record_fqdns = [for record in aws_route53_record.app_validation : record.fqdn]
 
+  timeouts {
+    create = "10m"
+  }
+}
+
+#########################################################
 # IAM Role and Policy for ExternalDNS (IRSA)
 data "aws_iam_policy_document" "oidc_trust" {
   statement {
@@ -146,19 +192,55 @@ resource "aws_iam_role_policy_attachment" "external_dns_attach" {
   policy_arn = aws_iam_policy.external_dns.arn
 }
 
-variable "app_hosts" {
-  type    = list(string)
-  default = ["weather","prom","gitlab", "jenkins"]
+#########################################################
+# Private DNS Zone for Internal Service Discovery
+#########################################################
+
+# Private Route53 zone for internal service discovery
+resource "aws_route53_zone" "internal" {
+  name    = "internal.local"
+  comment = "Private zone for VPC internal service discovery"
+
+  vpc {
+    vpc_id = data.terraform_remote_state.network.outputs.vpc_id
+  }
+
+  tags = {
+    Name        = "${var.project_name}-${var.env}-internal-zone"
+    Purpose     = "Internal service discovery"
+    Environment = var.env
+    Project     = var.project_name
+    ManagedBy   = "Terraform"
+  }
 }
 
-# Create Cloudflare DNS records for apps in the env subdomain pointing to R53 subdomain
-resource "cloudflare_dns_record" "apps_env_cnames" {
-  for_each = toset(var.app_hosts)
+# DNS A records for CICD services
+resource "aws_route53_record" "gitlab_server" {
+  zone_id = aws_route53_zone.internal.zone_id
+  name    = "gitlab-server.internal.local"
+  type    = "A"
+  ttl     = 300
+  records = [data.terraform_remote_state.cicd.outputs.gitlab_private_ip]
 
+  depends_on = [aws_route53_zone.internal]
+}
+
+resource "aws_route53_record" "jenkins_server" {
+  zone_id = aws_route53_zone.internal.zone_id
+  name    = "jenkins-server.internal.local"
+  type    = "A"
+  ttl     = 300
+  records = [data.terraform_remote_state.cicd.outputs.jenkins_private_ip]
+
+  depends_on = [aws_route53_zone.internal]
+}
+
+# Create Cloudflare DNS records for app in the env subdomain pointing to R53 subdomain
+resource "cloudflare_dns_record" "apps_env_cnames" {
   zone_id = local.cf_zone_id
-  name    = "${each.key}.${var.env}.${var.base_domain}"
+  name    = "weather.${var.env}.${var.base_domain}"
   type    = "CNAME"
-  content = "${each.key}.${local.env_fqdn_r53_base}"
+  content = "weather.${local.env_fqdn_r53_base}"
   ttl     = 120
   proxied = false
 }

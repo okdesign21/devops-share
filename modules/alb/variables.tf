@@ -22,7 +22,7 @@ variable "default_tg_name" {
 variable "routes" {
   type = list(object({
     name        = string
-    header      = optional(string)      # Single header (deprecated, use headers)
+    header      = optional(string)       # Single header (deprecated, use headers)
     headers     = optional(list(string)) # Multiple headers
     port        = number
     health_path = string
@@ -34,4 +34,16 @@ variable "routes" {
 variable "enable_prometheus" {
   type    = bool
   default = false
+}
+
+variable "certificate_arn" {
+  description = "ACM certificate ARN for HTTPS listener (optional)"
+  type        = string
+  default     = ""
+}
+
+variable "enable_https" {
+  description = "Enable HTTPS listener (requires certificate_arn)"
+  type        = bool
+  default     = false
 }

@@ -72,16 +72,16 @@ locals {
     (length(data.aws_ami.jenkins_lookup) > 0 ? data.aws_ami.jenkins_lookup[0].id : "")
   )
 
-  # Main domain hosts (used for user access and ALB routing)
-  gitlab_host  = "gitlab.${var.env}.${var.base_domain}"
-  jenkins_host = "jenkins.${var.env}.${var.base_domain}"
+  # SSM-only access configuration (localhost-based)
+  # Users access via: aws ssm start-session --target <instance-id> --document AWS-StartPortForwardingSession
 
-  # R53 subdomain hosts (actual DNS records pointing to ALB)
-  gitlab_host_r53  = "gitlab.${var.env}.r53.${var.base_domain}"
-  jenkins_host_r53 = "jenkins.${var.env}.r53.${var.base_domain}"
-
-  gitlab_url  = "${var.gitlab_protocol}://${local.gitlab_host}"
-  jenkins_url = "${var.jenkins_protocol}://${local.jenkins_host}"
+  # Localhost communication variables
+  gitlab_self_url      = "http://localhost"                          # GitLab self-reference
+  jenkins_self_url     = "http://localhost:8080"                     # Jenkins self-reference
+  gitlab_for_jenkins   = "http://gitlab-server.internal.local"       # How Jenkins reaches GitLab
+  jenkins_for_agents   = "http://jenkins-server.internal.local:8080" # How agents reach Jenkins  # External URLs for user access via SSM port-forward  
+  gitlab_external_url  = "https://localhost:8443"                    # User access via SSM port-forward
+  jenkins_external_url = "https://localhost:8080"                    # User access via SSM port-forward
 
   gitlab_trusted_cidrs = (
     contains(keys(data.terraform_remote_state.network.outputs), "private_subnet_cidrs") && length(data.terraform_remote_state.network.outputs.private_subnet_cidrs) > 0 ?
@@ -96,6 +96,12 @@ locals {
   inst_subnets = tolist(data.terraform_remote_state.network.outputs.public_subnet_ids)
   vpc_id       = data.terraform_remote_state.network.outputs.vpc_id
   ssm_profile  = data.terraform_remote_state.network.outputs.ssm_instance_profile_name
+
+  tags = {
+    Environment = var.env
+    Project     = var.project_name
+    ManagedBy   = "Terraform"
+  }
 }
 
 # fail early if any required AMI is unresolved
@@ -104,65 +110,6 @@ resource "null_resource" "require_amis" {
 
   provisioner "local-exec" {
     command = "echo 'ERROR: unresolved AMIs -> jenkins_server=${local.jenkins_server_ami_resolved} gitlab=${local.gitlab_ami_resolved}'; exit 1"
-  }
-}
-
-# ALB SG (80 from anywhere, egress all)
-resource "aws_security_group" "sg_alb" {
-  name        = "${var.project_name}-cicd-alb-sg"
-  description = "ALB ingress 80"
-  vpc_id      = local.vpc_id
-
-  ingress {
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-}
-
-resource "aws_security_group" "sg_jenkins_srv" {
-  name        = "${var.project_name}-jenkins-srv-sg"
-  description = "Jenkins server"
-  vpc_id      = local.vpc_id
-
-  ingress {
-    from_port       = 8080
-    to_port         = 8080
-    protocol        = "tcp"
-    security_groups = [aws_security_group.sg_alb.id]
-  }
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-}
-
-resource "aws_security_group" "sg_gitlab" {
-  name        = "${var.project_name}-gitlab-sg"
-  description = "GitLab server"
-  vpc_id      = local.vpc_id
-
-  ingress {
-    from_port       = 8080
-    to_port         = 8080
-    protocol        = "tcp"
-    security_groups = [aws_security_group.sg_alb.id]
-  }
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
   }
 }
 
@@ -177,33 +124,8 @@ resource "aws_security_group" "sg_jenkins_agt" {
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
-}
 
-module "alb" {
-  source            = "../../../modules/alb"
-  name              = "${var.project_name}-dev"
-  vpc_id            = local.vpc_id
-  subnets           = local.inst_subnets
-  security_group_id = aws_security_group.sg_alb.id
-
-  routes = concat(
-    [
-      { 
-        name        = "jenkins"
-        headers     = [local.jenkins_host, local.jenkins_host_r53]
-        port        = var.jenkins_port
-        health_path = "/login"
-        priority    = 10
-      },
-      { 
-        name        = "gitlab"
-        headers     = [local.gitlab_host, local.gitlab_host_r53]
-        port        = var.gitlab_port
-        health_path = "/gitlab/users/sign_in"
-        priority    = 20
-      }
-    ]
-  )
+  tags = merge(local.tags, { Name = "${var.project_name}-jenkins-agt-sg" })
 }
 
 module "ud_jenkins_server" {
@@ -211,10 +133,10 @@ module "ud_jenkins_server" {
   scripts = [
     "${path.module}/../../../modules/userdata/compose/jenkins_server.sh",
     templatefile("../../../modules/userdata/templates/jenkins_env.tpl", {
-      public_hostname = local.jenkins_host
-      jenkins_url     = local.jenkins_url
-      gitlab_url      = local.gitlab_url
-      agent_override  = local.jenkins_host
+      public_hostname = "jenkins-server.internal.local" # Internal FQDN
+      jenkins_url     = local.jenkins_self_url          # http://localhost:8080 (self)
+      gitlab_url      = local.gitlab_for_jenkins        # http://gitlab-server.internal.local (cross-service)
+      agent_override  = "jenkins-server.internal.local" # Internal FQDN
     })
   ]
 }
@@ -224,7 +146,7 @@ module "jenkins_server" {
   name                 = "${var.project_name}-jenkins-server"
   ami_id               = local.jenkins_server_ami_resolved
   subnet_id            = element(data.terraform_remote_state.network.outputs.private_subnet_ids, 0)
-  sg_ids               = [aws_security_group.sg_jenkins_srv.id]
+  sg_ids               = [data.terraform_remote_state.network.outputs.ssm_only_sg_id]
   key_name             = data.terraform_remote_state.network.outputs.key_name
   instance_type        = var.jenkins_server_instance_type
   root_volume_size_gb  = var.jenkins_server_volume_size_gb
@@ -232,21 +154,21 @@ module "jenkins_server" {
   iam_instance_profile = local.ssm_profile
   project_name         = var.project_name
   env                  = var.env
+  ssm_access           = "devs" # Allow "Devs" group SSM access
   depends_on           = [null_resource.require_amis]
 
   user_data = module.ud_jenkins_server.content
 }
-
 
 module "ud_gitlab" {
   source = "../../../modules/userdata"
   scripts = [
     "${path.module}/../../../modules/userdata/compose/gitlab.sh",
     templatefile("../../../modules/userdata/templates/gitlab_env.tpl", {
-      external_url  = local.gitlab_url
-      trusted_cidrs = local.gitlab_trusted_cidrs
-      trusted_array = local.gitlab_trusted_array
-      gitlab_host   = local.gitlab_host
+      external_url  = local.gitlab_self_url          # http://localhost (self-reference)
+      trusted_cidrs = local.gitlab_trusted_cidrs     # Private subnet CIDRs
+      trusted_array = local.gitlab_trusted_array     # Private subnet array
+      gitlab_host   = "gitlab-server.internal.local" # Internal FQDN
     })
   ]
 }
@@ -257,13 +179,14 @@ module "gitlab" {
   name                = "${var.project_name}-gitlab-server"
   ami_id              = local.gitlab_ami_resolved
   subnet_id           = element(data.terraform_remote_state.network.outputs.private_subnet_ids, 1 % length(data.terraform_remote_state.network.outputs.private_subnet_ids))
-  sg_ids              = [aws_security_group.sg_gitlab.id]
+  sg_ids              = [data.terraform_remote_state.network.outputs.ssm_only_sg_id]
   key_name            = data.terraform_remote_state.network.outputs.key_name
   instance_type       = var.gitlab_server_instance_type
   root_volume_size_gb = var.gitlab_volume_size_gb
   associate_public_ip = false
   project_name        = var.project_name
   env                 = var.env
+  ssm_access          = "devs" # Allow "Devs" group SSM access
   user_data           = module.ud_gitlab.content
 
   iam_instance_profile = local.ssm_profile
@@ -279,7 +202,7 @@ module "ud_jenkins_agent" {
     "${path.module}/../../../modules/userdata/compose/jenkins_agent.sh",
     templatefile("../../../modules/userdata/templates/jenkins_agnt_env.tpl",
       {
-        jenkins_url = local.jenkins_url
+        jenkins_url = local.jenkins_for_agents # http://jenkins-server.internal.local:8080
     })
   ]
 }
@@ -302,17 +225,7 @@ module "jenkins_agent" {
   env                  = var.env
 }
 
-resource "aws_lb_target_group_attachment" "jenkins" {
-  target_group_arn = module.alb.tg_arns["jenkins"]
-  target_id        = module.jenkins_server.instance_id
-  port             = 8080
-}
-
-resource "aws_lb_target_group_attachment" "gitlab" {
-  target_group_arn = module.alb.tg_arns["gitlab"]
-  target_id        = module.gitlab.instance_id
-  port             = 8080
-}
+# Target group attachments removed - no ALB
 
 data "aws_ssm_parameter" "ubuntu_24" {
   name = var.ubuntu_ami

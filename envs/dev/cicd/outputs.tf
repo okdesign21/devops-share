@@ -1,17 +1,5 @@
-output "sg_jenkins_srv" {
-  value = aws_security_group.sg_jenkins_srv.id
-}
-
 output "sg_jenkins_agt" {
   value = aws_security_group.sg_jenkins_agt.id
-}
-
-output "sg_gitlab" {
-  value = aws_security_group.sg_gitlab.id
-}
-
-output "sg_cicd-alb" {
-  value = aws_security_group.sg_alb.id
 }
 
 output "jenkins_server_id" {
@@ -22,8 +10,9 @@ output "gitlab_server_id" {
   value = module.gitlab.instance_id
 }
 
-output "cicd_alb_dns" {
-  value = module.alb.alb_dns_name
+output "ssm_cicd_policy_arn" {
+  description = "IAM policy ARN to attach to 'Devs' group for SSM access (from network stack)"
+  value       = data.terraform_remote_state.network.outputs.ssm_cicd_policy_arn
 }
 
 output "jenkins_ami_used" {
@@ -35,11 +24,13 @@ output "gitlab_ami_used" {
 }
 
 output "gitlab_url" {
-  value = local.gitlab_url
+  description = "GitLab self-reference URL (accessed via SSM port-forward on :8443)"
+  value       = local.gitlab_self_url
 }
 
 output "jenkins_url" {
-  value = local.jenkins_url
+  description = "Jenkins self-reference URL (accessed via SSM port-forward on :8080)"
+  value       = local.jenkins_self_url
 }
 
 output "jenkins_private_ip" {

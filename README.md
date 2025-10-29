@@ -1,13 +1,234 @@
-# Dev Environment Terraform Guide
+# 🏗️ AWS Infrastructure with Terraform
 
-This repository contains Terraform stacks that stand up the "dev" environment for the project. The stacks break down into four logical layers:
+Multi-stack Terraform infrastructure for development and production environments.
 
-- `network` – VPC, subnets, NAT instance, IAM and SSH bootstrap.
-- `cicd` – EC2-based CI/CD services and supporting networking.
-- `eks` – EKS control plane, managed node groups, and cluster add-ons.
-- `dns` – Route53 private zone and Cloudflare public records linked to the other stacks.
+## 📋 **Quick Start**
 
-All stacks share remote state stored in **S3 bucket** `tfstate-inf-orinbar-euc1` under the prefix `cicd/<env>/<stack>/terraform.tfstate`.
+### **Prerequisites**
+- Terraform ≥ 1.5
+- AWS CLI v2 configured
+- Access to S3 backend: `tfstate-inf-orinbar-euc1`
+
+### **Deployment**
+```bash
+# Deploy all stacks in order
+make apply STACK=network ENV=dev
+make apply STACK=cicd ENV=dev  
+make apply STACK=dns ENV=dev
+make apply STACK=eks ENV=dev
+```
+
+### **Destroy**
+```bash
+# Destroy in reverse order
+make destroy STACK=dns ENV=dev
+make destroy STACK=eks ENV=dev
+make destroy STACK=cicd ENV=dev
+make destroy STACK=network ENV=dev
+```
+
+---
+
+## 🏗️ **Stack Overview**
+
+### **1. Network** (`envs/dev/network/`)
+- VPC with public/private subnets
+- Custom NAT instance (cost-optimized)
+- SSM access configuration
+- Security groups
+
+### **2. CICD** (`envs/dev/cicd/`)
+- GitLab server (version control)
+- Jenkins server (build automation)
+- Jenkins agents (ephemeral builders)
+- SSM-only access (no public IPs)
+
+### **3. DNS** (`envs/dev/dns/`)
+- Route53 public zone (delegated from Cloudflare)
+- Route53 private zone (`internal.local`)
+- ACM certificate with DNS validation
+- ExternalDNS IRSA role
+
+### **4. EKS** (`envs/dev/eks/`)
+- EKS cluster with managed node groups
+- AWS Load Balancer Controller IRSA
+- Public API (restricted IPs)
+- Private worker nodes
+
+---
+
+## 🔐 **Access Patterns**
+
+### **CICD Services (SSM Port-Forward)**
+```bash
+# GitLab (localhost:8443)
+aws ssm start-session --target <gitlab-instance-id> \
+  --document-name AWS-StartPortForwardingSession \
+  --parameters '{"portNumber":["80"],"localPortNumber":["8443"]}'
+
+# Jenkins (localhost:8080)
+aws ssm start-session --target <jenkins-instance-id> \
+  --document-name AWS-StartPortForwardingSession \
+  --parameters '{"portNumber":["8080"],"localPortNumber":["8080"]}'
+```
+
+### **Kubernetes Cluster**
+```bash
+# Update kubeconfig (automatic after EKS apply)
+aws eks update-kubeconfig --name proj-dev-cluster --region eu-central-1
+```
+
+---
+
+## 🌍 **Architecture**
+
+```
+Internet
+    ↓
+Cloudflare: infinity.ortflix.uk
+    ↓ (NS delegation)
+Route53: r53.infinity.ortflix.uk
+    ↓ (ExternalDNS)
+ALB → EKS Apps
+
+Private Access:
+Developer → SSM → GitLab/Jenkins (private subnets)
+EKS Pods → Private DNS → gitlab-server.internal.local
+```
+
+**See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed diagrams and explanations.**
+
+---
+
+## 📊 **Deployment Order**
+
+```mermaid
+graph TD
+    A[network] --> B[cicd]
+    A --> C[eks]
+    B --> D[dns]
+    C --> D
+```
+
+**Dependencies:**
+- `dns` requires `cicd` (for private IPs) and `eks` (for IRSA ARN)
+- `cicd` and `eks` both require `network` (VPC, subnets)
+
+---
+
+## 🎯 **Key Features**
+
+- ✅ **SSM-Only Access**: No bastion hosts or public IPs for CICD
+- ✅ **Private DNS**: Clean hostnames (`gitlab-server.internal.local`)
+- ✅ **Cost-Optimized**: Custom NAT instance (~$7/mo vs ~$45/mo)
+- ✅ **Automated Certificates**: ACM + DNS validation
+- ✅ **GitOps Ready**: ArgoCD uses private DNS for repository access
+- ✅ **IRSA**: EKS service accounts with IAM roles
+
+---
+
+## 📚 **Documentation**
+
+- **[ARCHITECTURE.md](ARCHITECTURE.md)**: Detailed architecture overview
+- **[K8S_INTEGRATION.md](K8S_INTEGRATION.md)**: Kubernetes manifests and ArgoCD setup
+- **[Makefile](Makefile)**: Available commands
+
+---
+
+## 🔧 **Configuration**
+
+### **Common Variables** (`envs/common.tfvars`)
+```hcl
+project_name  = "proj"
+region        = "eu-central-1"
+state_bucket  = "tfstate-inf-orinbar-euc1"
+base_domain   = "infinity.ortflix.uk"
+```
+
+### **Environment Variables** (`envs/dev/dev-common.tfvars`)
+```hcl
+env = "dev"
+```
+
+### **Stack-Specific** (`envs/dev/<stack>/terraform.tfvars`)
+- Network: VPC CIDR, NAT instance size
+- CICD: Instance types, volume sizes
+- EKS: Node count, instance types
+
+---
+
+## 🧪 **Testing**
+
+### **Verify Network**
+```bash
+# Check NAT instance
+aws ec2 describe-instances --filters "Name=tag:Name,Values=proj-nat"
+```
+
+### **Verify DNS**
+```bash
+# Check private DNS resolution from EKS
+kubectl run test --image=busybox --rm -it -- \
+  nslookup gitlab-server.internal.local
+```
+
+### **Verify Certificate**
+```bash
+# Check ACM certificate status
+CERT_ARN=$(terraform -chdir=envs/dev/dns output -raw app_certificate_arn)
+aws acm describe-certificate --certificate-arn "$CERT_ARN" \
+  --query 'Certificate.Status' --output text
+```
+
+---
+
+## 🚀 **Production Deployment**
+
+Production environment structure is ready in `envs/prod/`. To populate:
+
+1. Copy dev configurations to prod directories
+2. Update CIDRs (use 20.10.x.x range)
+3. Adjust instance sizes and counts
+4. Deploy with `ENV=prod`
+
+---
+
+## 💡 **Troubleshooting**
+
+### **Terraform State Issues**
+```bash
+# Re-initialize backend
+make init ENV=dev
+
+# Import existing resource
+terraform import -var-file=../../common.tfvars \
+  aws_key_pair.gen[0] proj-dev-key
+```
+
+### **SSM Session Not Working**
+- Verify instance has SSM agent running
+- Check IAM instance profile attached
+- Verify security group allows outbound 443
+
+### **DNS Not Resolving**
+- Confirm private zone attached to VPC
+- Check A records created with correct IPs
+- Verify VPC DNS settings enabled
+
+---
+
+## 📝 **Maintenance**
+
+- Update Terraform providers: `terraform init -upgrade`
+- Rotate SSH keys: Regenerate via `keygen.tf`
+- Update EKS version: Change `cluster_version` variable
+- Certificate renewal: Automatic via ACM
+
+---
+
+**Status: Production Ready** ✅
+
+For detailed architecture explanations, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ---
 

@@ -74,37 +74,7 @@ variable "ami_owner_ids" {
   default     = []
 }
 
-variable "gitlab_host" {
-  type        = string
-  default     = ""
-  description = "Override GitLab FQDN (if empty, constructed from env_prefix + base_domain)."
-}
-
-variable "jenkins_host" {
-  type        = string
-  default     = ""
-  description = "Override Jenkins FQDN (if empty, constructed from env_prefix + base_domain)."
-}
-
-variable "gitlab_protocol" {
-  type    = string
-  default = "http"
-}
-
-variable "jenkins_protocol" {
-  type    = string
-  default = "http"
-}
-
-variable "gitlab_port" {
-  type    = number
-  default = 8080
-}
-
-variable "jenkins_port" {
-  type    = number
-  default = 8080
-}
+# Unused ALB-related variables removed - instances now use SSM-only access
 
 variable "base_domain" {
   type = string

@@ -16,5 +16,10 @@ resource "aws_instance" "this" {
     delete_on_termination = true
   }
 
-  tags = { Name = var.name, Environment = var.env, Project = var.project_name }
+  tags = {
+    Name        = var.name
+    Environment = var.env
+    Project     = var.project_name
+    SSMAccess   = var.ssm_access
+  }
 }

@@ -37,21 +37,27 @@ Private Subnets (10.10.11.0/24, 10.10.12.0/24):
 ## 🔐 **CICD Infrastructure**
 
 ### **Services**
-- **GitLab**: Version control, CI/CD pipelines
-- **Jenkins**: Build automation, deployment orchestration
-- **Jenkins Agents**: Ephemeral build executors
+- **GitLab**: Version control, CI/CD pipelines (Docker Compose)
+- **Jenkins**: Build automation, deployment orchestration (Docker Compose)
+- **Jenkins Agents**: Ephemeral build executors (auto-registered via JCasC)
+
+### **Auto-Configuration Features**
+- **Jenkins URL**: Automatically set via JCasC to `http://jenkins-server.internal.local:8080`
+- **Agent Registration**: Agents auto-register via JCasC configuration
+- **Agent Secret Distribution**: Jenkins publishes agent secret via HTTP endpoint on port 8081
+- **Plugin Installation**: Automatic installation of required plugins on startup
+  - Configuration as Code (JCasC)
+  - Docker Pipeline
+  - Git Plugin
+  - Pipeline Plugin (workflow-aggregator)
+  - Slack Notification
+  - Credentials
 
 ### **Access Pattern**
 ```bash
-# Developer → SSM Port-Forward → GitLab (localhost:8443)
-aws ssm start-session --target i-gitlab123 \
-  --document-name AWS-StartPortForwardingSession \
-  --parameters '{"portNumber":["80"],"localPortNumber":["8443"]}'
-
-# Developer → SSM Port-Forward → Jenkins (localhost:8080)  
-aws ssm start-session --target i-jenkins456 \
-  --document-name AWS-StartPortForwardingSession \
-  --parameters '{"portNumber":["8080"],"localPortNumber":["8080"]}'
+# Quick access using aliases (after running: make ssm-aliases)
+gitlab-web        # Opens GitLab at http://localhost:8443
+jenkins-web       # Opens Jenkins at http://localhost:8080
 ```
 
 ### **Internal Communication**
@@ -59,6 +65,15 @@ aws ssm start-session --target i-jenkins456 \
 - **Jenkins self-reference**: `http://localhost:8080` (container → localhost)
 - **Jenkins → GitLab**: `http://gitlab-server.internal.local` (via private DNS)
 - **Jenkins ← Agents**: `http://jenkins-server.internal.local:8080` (via private DNS)
+- **Agent Secret Exchange**: `http://jenkins-server.internal.local:8081/docker-secret.txt` (via nginx sidecar)
+
+### **Jenkins Agent Auto-Registration Flow**
+1. Jenkins server starts → JCasC creates agent node named "docker"
+2. Groovy init script extracts agent secret → writes to `/var/jenkins_home/agent-secrets/docker-secret.txt`
+3. Nginx sidecar container serves secrets directory on port 8081
+4. Agent EC2 instance fetches secret from `http://jenkins-server.internal.local:8081/docker-secret.txt`
+5. Agent connects automatically using WebSocket protocol
+
 
 ---
 

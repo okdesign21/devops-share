@@ -15,7 +15,7 @@ STACK_LIST     := $(if $(filter all,$(STACK)),$(STACKS),$(STACK))
 # Reverse order for destroy-all
 REVERSE_STACKS := $(if $(filter all,$(STACK)),$(shell echo $(STACKS) | awk '{for(i=NF;i>=1;i--) printf "%s ", $$i}'),$(STACK))
 
-.PHONY: init plan apply destroy output validate fmt show
+.PHONY: init plan apply destroy output validate fmt show access-guide ssm-aliases
 
 init:
 	@for s in $(STACK_LIST) ; do \
@@ -66,3 +66,16 @@ show:
 		echo "== terraform show $$s (ENV=$(ENV)) =="; \
 		terraform -chdir=envs/$(ENV)/$$s show || true; \
 	done
+
+# Generate access guide with all infrastructure details
+access-guide:
+	@echo "Generating infrastructure access guide..."
+	@./generate-access-commands.sh
+
+# Generate SSM port-forward aliases
+ssm-aliases:
+	@echo "Generating SSM port-forward aliases..."
+	@./generate-ssm-aliases.sh
+	@echo ""
+	@echo "To activate aliases, run:"
+	@echo "  source ~/.ssm-aliases"

@@ -15,9 +15,10 @@ VPC_ID=$(terraform -chdir=envs/dev/network output -raw vpc_id 2>/dev/null)
 GITLAB_IP=$(terraform -chdir=envs/dev/cicd output -raw gitlab_private_ip 2>/dev/null)
 JENKINS_IP=$(terraform -chdir=envs/dev/cicd output -raw jenkins_private_ip 2>/dev/null)
 NAT_IP=$(terraform -chdir=envs/dev/network output -raw nat_instance_public_ip 2>/dev/null)
-REGION=$(terraform -chdir=envs/dev/eks output -raw kubeconfig_command 2>/dev/null | grep -oP '(?<=--region )\S+')
+REGION=$(terraform -chdir=envs/dev/eks output -raw kubeconfig_command 2>/dev/null | grep -oP '(?<=--region )\S+' || echo "eu-central-1")
 EXTERNAL_DNS_ROLE=$(terraform -chdir=envs/dev/dns output -raw external_dns_role_arn 2>/dev/null)
 ALB_ROLE=$(terraform -chdir=envs/dev/eks output -raw alb_controller_role_arn 2>/dev/null)
+CERT_ARN=$(terraform -chdir=envs/dev/dns output -raw app_certificate_arn 2>/dev/null)
 
 cat > "$OUTPUT_FILE" << EOF
 # 🔐 Infrastructure Access Guide
@@ -269,7 +270,7 @@ metadata:
   annotations:
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
-    alb.ingress.kubernetes.io/certificate-arn: $(terraform -chdir=envs/dev/dns output -raw app_certificate_arn)
+    alb.ingress.kubernetes.io/certificate-arn: ${CERT_ARN}
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
     alb.ingress.kubernetes.io/ssl-redirect: '443'
     external-dns.alpha.kubernetes.io/hostname: app.dev.r53.infinity.ortflix.uk

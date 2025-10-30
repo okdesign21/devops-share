@@ -19,10 +19,9 @@ services:
     container_name: jenkins-agent-docker
     build: .
     restart: always
+    env_file:
+      - /opt/jenkins-agent/.env
     environment:
-      - JENKINS_URL= '${JENKINS_URL}'
-      - JENKINS_AGENT_NAME=docker
-      - JENKINS_SECRET=__REPLACE_ME__
       - JENKINS_WEB_SOCKET=true
       - JENKINS_AGENT_WORKDIR=/home/jenkins/agent
     volumes:

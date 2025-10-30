@@ -76,12 +76,13 @@ locals {
   # Users access via: aws ssm start-session --target <instance-id> --document AWS-StartPortForwardingSession
 
   # Localhost communication variables
-  gitlab_self_url      = "http://localhost"                          # GitLab self-reference
-  jenkins_self_url     = "http://localhost:8080"                     # Jenkins self-reference
-  gitlab_for_jenkins   = "http://gitlab-server.internal.local"       # How Jenkins reaches GitLab
-  jenkins_for_agents   = "http://jenkins-server.internal.local:8080" # How agents reach Jenkins  # External URLs for user access via SSM port-forward  
-  gitlab_external_url  = "https://localhost:8443"                    # User access via SSM port-forward
-  jenkins_external_url = "https://localhost:8080"                    # User access via SSM port-forward
+  # GitLab uses internal DNS for clone URLs (Jenkins/EKS can reach it)
+  gitlab_self_url      = "http://gitlab-server.vpc.internal"                          # GitLab self-reference (for clone URLs)
+  jenkins_self_url     = "http://localhost:8080"                                      # Jenkins self-reference
+  gitlab_for_jenkins   = "http://gitlab-server.vpc.internal"                          # How Jenkins reaches GitLab
+  jenkins_for_agents   = "http://jenkins-server.vpc.internal:8080"                    # How agents reach Jenkins
+  gitlab_external_url  = "https://localhost:8443"                                     # User access via SSM port-forward
+  jenkins_external_url = "https://localhost:8080"                                     # User access via SSM port-forward
 
   gitlab_trusted_cidrs = (
     contains(keys(data.terraform_remote_state.network.outputs), "private_subnet_cidrs") && length(data.terraform_remote_state.network.outputs.private_subnet_cidrs) > 0 ?

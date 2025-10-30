@@ -101,13 +101,16 @@ resource "aws_route53_record" "app_validation" {
       record = dvo.resource_record_value
       type   = dvo.resource_record_type
     }
+    # Ensure consistent ordering by filtering to unique domain names
+    if dvo.domain_name != ""
   } : {}
 
-  zone_id = aws_route53_zone.r53[0].zone_id
-  name    = each.value.name
-  type    = each.value.type
-  records = [each.value.record]
-  ttl     = 60
+  allow_overwrite = true
+  zone_id         = aws_route53_zone.r53[0].zone_id
+  name            = each.value.name
+  type            = each.value.type
+  records         = [each.value.record]
+  ttl             = 60
 }
 
 # ACM Certificate validation
@@ -198,7 +201,7 @@ resource "aws_iam_role_policy_attachment" "external_dns_attach" {
 
 # Private Route53 zone for internal service discovery
 resource "aws_route53_zone" "internal" {
-  name    = "internal.local"
+  name    = "vpc.internal"
   comment = "Private zone for VPC internal service discovery"
 
   vpc {
@@ -217,7 +220,7 @@ resource "aws_route53_zone" "internal" {
 # DNS A records for CICD services
 resource "aws_route53_record" "gitlab_server" {
   zone_id = aws_route53_zone.internal.zone_id
-  name    = "gitlab-server.internal.local"
+  name    = "gitlab-server.vpc.internal"
   type    = "A"
   ttl     = 300
   records = [data.terraform_remote_state.cicd.outputs.gitlab_private_ip]
@@ -227,7 +230,7 @@ resource "aws_route53_record" "gitlab_server" {
 
 resource "aws_route53_record" "jenkins_server" {
   zone_id = aws_route53_zone.internal.zone_id
-  name    = "jenkins-server.internal.local"
+  name    = "jenkins-server.vpc.internal"
   type    = "A"
   ttl     = 300
   records = [data.terraform_remote_state.cicd.outputs.jenkins_private_ip]

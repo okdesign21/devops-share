@@ -62,12 +62,6 @@ variable "jenkins_agent_count" {
   default = 1
 }
 
-variable "ubuntu_ami" {
-  description = "SSM parameter name for Ubuntu AMI (from common.tfvars) or empty"
-  type        = string
-  default     = ""
-}
-
 variable "ami_owner_ids" {
   description = "List of owner account IDs to filter AMI lookups (empty = no owner filter)."
   type        = list(string)

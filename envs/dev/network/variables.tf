@@ -28,8 +28,9 @@ variable "key_name" {
 }
 
 variable "ubuntu_ami" {
-  description = "SSM parameter name or AMI id to use for Ubuntu images (provided via common.tfvars)"
+  description = "SSM parameter name or AMI id to use for Ubuntu images (defult 24.04 LTS)"
   type        = string
+  default     = "/aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id"
 }
 
 variable "state_bucket" {

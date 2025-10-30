@@ -103,7 +103,14 @@ resource "aws_security_group" "ssm_only" {
   description = "SSM-only access, no inbound internet"
   vpc_id      = module.vpc.vpc_id
 
-  # No inbound rules - SSM works via outbound connections
+  # Allow inbound traffic from within VPC (for internal services like EKS accessing GitLab/Jenkins)
+  ingress {
+    description = "Allow all traffic from VPC CIDR"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = [local.vpc_cidr]
+  }
 
   # Allow outbound HTTPS to VPC for AWS API calls
   egress {

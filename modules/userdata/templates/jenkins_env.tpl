@@ -12,4 +12,5 @@ chown root:root /opt/jenkins/.env || true
 chmod 640 /opt/jenkins/.env || true
 
 DOCKER_BIN="$(command -v docker)"
-"$DOCKER_BIN" compose up -d --build --force-recreate /opt/jenkins/docker-compose.yml
+cd /opt/jenkins
+"$DOCKER_BIN" compose up -d

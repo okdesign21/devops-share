@@ -140,11 +140,12 @@ SANs:
 2. CICD Stack (GitLab, Jenkins instances)
    cd envs/dev/cicd && terraform apply
 
-3. DNS Stack (Route53 zones, certificates, private DNS)
-   cd envs/dev/dns && terraform apply
-
-4. EKS Stack (cluster, nodes, IRSA roles)
+3. EKS Stack (cluster, nodes, IRSA roles)
    cd envs/dev/eks && terraform apply
+
+4. DNS Stack (Route53 zones, certificates, private DNS, ExternalDNS IRSA)
+   cd envs/dev/dns && terraform apply
+   # Requires: EKS OIDC provider for ExternalDNS IRSA trust policy
 ```
 
 ### **Application Deployment (ArgoCD)**

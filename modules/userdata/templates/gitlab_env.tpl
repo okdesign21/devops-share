@@ -11,4 +11,5 @@ chown root:root /opt/gitlab/.env || true
 chmod 640 /opt/gitlab/.env || true
 
 DOCKER_BIN="$(command -v docker)"
-"$DOCKER_BIN" compose  up -d --build --force-recreate /opt/gitlab/docker-compose.yml
+cd /opt/gitlab
+"$DOCKER_BIN" compose up -d

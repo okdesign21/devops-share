@@ -1,8 +1,6 @@
 # 🔗 **Kubernetes Integration Guide**
 
-## 🎯 **QUICK ANSWER: ArgoCD Repository URL**
-
-**BEST OPTION: Use hostname resolution (NOW CONFIGURED!)**
+## 🎯 **ArgoCD Repository URL**
 ```yaml
 # In ArgoCD Application manifest:
 spec:
@@ -11,41 +9,16 @@ spec:
     path: k8s-manifests
     targetRevision: HEAD
 ```
-
-**Why hostname is better than IP:**
-- ✅ **Clean & maintainable** - no hardcoded IPs
-- ✅ **Instance replacement friendly** - IP can change, hostname stays the same  
-- ✅ **Private DNS configured** - Route53 private zone `internal.local` created
-- ✅ **Standard practice** - industry standard for internal service discovery
-
 **How DNS resolution works:**
 1. **Private Route53 Zone**: `internal.local` zone attached to your VPC
 2. **DNS A Records**: `gitlab-server.internal.local` → GitLab private IP
 3. **VPC DNS**: EKS pods automatically use VPC DNS resolver
 4. **Result**: `gitlab-server.internal.local` resolves from anywhere in VPC!
 
-### **📋 Deployment Steps:**
+### **📋 Deployment:**
 
-```bash
-# 1. Deploy network stack (creates VPC)
-cd /home/or/devops-share/envs/dev/network
-terraform apply
-
-# 2. Deploy CICD stack (creates GitLab + Jenkins instances)  
-cd /home/or/devops-share/envs/dev/cicd
-terraform apply
-
-# 3. Deploy DNS stack (creates private zone + A records)
-cd /home/or/devops-share/envs/dev/dns
-terraform apply
-
-# 4. Verify hostname resolution works from EKS:
-kubectl run test-pod --image=busybox --rm -it -- nslookup gitlab-server.internal.local
-# Should return GitLab's private IP!
-
-# 5. Use in ArgoCD Application:
-# repoURL: http://gitlab-server.internal.local/your-username/your-repo.git
-```
+Use in ArgoCD Application:
+repoURL: http://gitlab-server.internal.local/your-username/your-repo.git
 
 ---
 

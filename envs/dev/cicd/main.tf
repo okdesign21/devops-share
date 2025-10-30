@@ -211,7 +211,7 @@ module "jenkins_agent" {
   source               = "../../../modules/ec2"
   for_each             = { for i in range(var.jenkins_agent_count) : i => i }
   name                 = "${var.project_name}-jenkins-agent-${each.key}"
-  ami_id               = data.aws_ssm_parameter.ubuntu_24.value
+  ami_id               = data.terraform_remote_state.network.outputs.ubuntu_ami_id
   subnet_id            = element(data.terraform_remote_state.network.outputs.private_subnet_ids, each.key % length(data.terraform_remote_state.network.outputs.private_subnet_ids))
   sg_ids               = [aws_security_group.sg_jenkins_agt.id]
   key_name             = data.terraform_remote_state.network.outputs.key_name
@@ -223,10 +223,4 @@ module "jenkins_agent" {
   depends_on           = [null_resource.require_amis]
   project_name         = var.project_name
   env                  = var.env
-}
-
-# Target group attachments removed - no ALB
-
-data "aws_ssm_parameter" "ubuntu_24" {
-  name = var.ubuntu_ami
 }

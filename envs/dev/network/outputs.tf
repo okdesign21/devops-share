@@ -14,7 +14,8 @@ output "public_subnet_ids" {
 }
 
 output "nat_instance_id" {
-  value = try(module.nat_instance.id, null)
+  description = "NAT instance ID"
+  value       = try(module.nat_instance.instance_id, null)
 }
 
 output "sg_nat_id" {
@@ -50,4 +51,10 @@ output "devs_group_name" {
 output "ssm_only_sg_id" {
   description = "Security group ID for SSM-only access"
   value       = aws_security_group.ssm_only.id
+}
+
+output "ubuntu_ami_id" {
+  description = "Resolved Ubuntu 24.04 AMI ID"
+  value       = data.aws_ssm_parameter.ubuntu_24.value
+  sensitive   = true
 }

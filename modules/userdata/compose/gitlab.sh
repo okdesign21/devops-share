@@ -10,7 +10,7 @@ services:
     restart: unless-stopped
     shm_size: "256m"
     ports:
-      - "8080:80"
+      - "80:80"
       - "2222:22"
     volumes:
       - /srv/gitlab/data:/var/opt/gitlab

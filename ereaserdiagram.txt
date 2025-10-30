@@ -1,103 +1,147 @@
-title AWS pipeline cloud
+title AWS Infrastructure - Dev Environment
 direction right
 
-Main_VPC [label: "Main_VPC (10.0.0.0/16)"] {
+// ── External Services ──
+Developer [icon: user, label: "Developer\n(IAM authenticated)"]
+Internet [icon: cloud, label: "Internet"]
+Cloudflare [icon: cloudflare, label: "Cloudflare DNS\ninfinity.ortflix.uk"]
+DockerHub [icon: docker, label: "Docker Hub"]
 
-  Public Route Table [icon: aws-route-table, label: "Public RT"]
-  Private Route Table [icon: aws-route-table, label: "Private RT"]
+// ── AWS Services ──
+SSM_Service [icon: aws-systems-manager, label: "AWS Systems Manager\nSession Manager"]
+Route53_Public [icon: aws-route-53, label: "Route53 Public Zone\nr53.infinity.ortflix.uk"]
+Route53_Private [icon: aws-route-53, label: "Route53 Private Zone\ninternal.local"]
+ACM [icon: aws-certificate-manager, label: "ACM Certificate\n*.dev.r53.infinity.ortflix.uk"]
 
-  InternetGateway [label: "Internet Gateway", icon: aws-internet-gateway]
-  ALB [label: "MyALB, SG: SG_ALB", icon: aws-alb]
+Main_VPC [label: "VPC: 10.10.0.0/16 (proj-dev)", icon: aws-vpc] {
+  
+  InternetGateway [icon: aws-internet-gateway, label: "Internet Gateway"]
+  Public_RT [icon: aws-route-table, label: "Public Route Table"]
+  Private_RT [icon: aws-route-table, label: "Private Route Table"]
 
-  // ── AZ eu-central-1a
+  // ── AZ eu-central-1a ──
   "AZ eu-central-1a" {
-    "Public subnet 10.0.1.0/24" {
-      NAT_Instance [label: "NAT Instance, SG: SG-NAT", icon: aws-ec2]
-      Bastion [label: "Bastion Host, SG: SG-BASTION-HOST", icon: aws-ec2]
+    Public_Subnet_A [label: "Public Subnet\n10.10.1.0/24"] {
+      NAT_Instance [icon: aws-ec2, label: "NAT Instance\nt3.micro\nSG: ssm_only + nat\nPublic IP: 18.194.41.61"]
     }
 
-    "Private subnet 10.0.2.0/24" {
-      JenkinsServer [label: "Jenkins Server, SG: SG-JENKINS-SRV", icon: jenkins]
-      JenkinsAgent  [label: "Jenkins Agent, SG: SG-JENKINS-AGT", icon: jenkins]
-      GitLab        [label: "GitLab, SG: SG-GITLAB", icon: gitlab]
-      Prometheus    [label: "Prometheus, SG: SG-PROM", icon: prometheus]
-
-      // EKS node group (private)
-      EKS_NG_A [label: "EKS Node Group (eu-central-1a)\nSG: SG-EKS-NODES\nASG/Managed Nodes", icon: aws-eks-node]
+    Private_Subnet_A [label: "Private Subnet\n10.10.11.0/24"] {
+      GitLab_Server [icon: gitlab, label: "GitLab Server\nt3.medium\nSG: ssm_only\nPrivate IP: 10.10.12.43\nDocker: gitlab/gitlab-ce"]
+      Jenkins_Server [icon: jenkins, label: "Jenkins Server\nt3.medium\nSG: ssm_only\nPrivate IP: 10.10.11.72\nDocker: jenkins/jenkins"]
+      
+      EKS_Node_A [icon: aws-eks-node, label: "EKS Node Group A\nt3.medium (x1)\nSG: eks_node\nPrivate subnet"]
     }
   }
 
-  // ── AZ eu-central-1b
+  // ── AZ eu-central-1b ──
   "AZ eu-central-1b" {
-    "Public subnet 10.0.3.0/24" { }
-    "Private subnet 10.0.4.0/24" {
-      // EKS node group (private)
-      EKS_NG_B [label: "EKS Node Group (eu-central-1b)\nSG: SG-EKS-NODES\nASG/Managed Nodes", icon: aws-eks-node]
+    Public_Subnet_B [label: "Public Subnet\n10.10.2.0/24"] { }
+
+    Private_Subnet_B [label: "Private Subnet\n10.10.12.0/24"] {
+      EKS_Node_B [icon: aws-eks-node, label: "EKS Node Group B\nt3.medium (x1)\nSG: eks_node\nPrivate subnet"]
     }
   }
 
-  // EKS Control Plane (managed by AWS; ENIs in private subnets)
-  EKS_Cluster [label: "EKS Cluster (control plane)\nSG: SG-EKS-CLUSTER", icon: aws-eks]
+  // ── EKS Control Plane ──
+  EKS_Cluster [icon: aws-eks, label: "EKS Cluster\nproj-dev-cluster\nv1.34\nPublic API endpoint"] {
+    ALB_Controller [icon: kubernetes, label: "AWS Load Balancer\nController\n(IRSA)"]
+    ExternalDNS [icon: kubernetes, label: "ExternalDNS\n(IRSA)"]
+    App_Pods [icon: kubernetes, label: "Application Pods\n(Future)"]
+  }
 }
 
-// ── Security Groups (with inline notes) ──
-SG_BASTION  [label: "SG-BASTION-HOST", icon: aws-security-group]
-SG_ALB      [label: "SG-ALB", icon: aws-security-group]
-SG_JENKSRV  [label: "SG-JENKINS-SRV", icon: aws-security-group]
-SG_JENKAGT  [label: "SG-JENKINS-AGT", icon: aws-security-group]
-SG_GITLAB   [label: "SG-GITLAB", icon: aws-security-group]
-SG_PROM     [label: "SG-PROM", icon: aws-security-group]
-SG_NAT      [label: "SG-NAT", icon: aws-security-group]
-SG_EKS_CL   [label: "SG-EKS-CLUSTER", icon: aws-security-group]
-SG_EKS_ND   [label: "SG-EKS-NODES", icon: aws-security-group]
+// ── Security Groups ──
+SG_SSM [icon: aws-security-group, label: "SG: ssm_only\nIngress: VPC CIDR (all)\nEgress: All"]
+SG_NAT [icon: aws-security-group, label: "SG: nat\nIngress: Private CIDRs\nEgress: All"]
+SG_EKS_Cluster [icon: aws-security-group, label: "SG: eks_cluster\nManaged by EKS"]
+SG_EKS_Node [icon: aws-security-group, label: "SG: eks_node\nIngress: 10250 (cluster)\nEgress: All"]
 
-// SG rules (MyApp SG removed)
-SG_BASTION // Inbound: SSH (22) from admin IP; Outbound: all
-SG_ALB     // Inbound: HTTP/80, HTTPS/443 from 0.0.0.0/0; Outbound: NodePort 30080 to SG-EKS-NODES
-SG_JENKSRV // Inbound: 22 (SG-BASTION), 50000 (SG-JENKINS-AGT), 8080/443 (SG-GITLAB)
-SG_JENKAGT // Inbound: 22 (SG-BASTION); Outbound: 443 (DockerHub)
-SG_GITLAB  // Inbound: 22,2222,8080,443 (SG-BASTION, SG-JENKINS)
-SG_PROM    // Inbound: 22,3000,9090 (admin IPs); Outbound: scrape SG-EKS-NODES (as needed)
-SG_NAT     // Inbound: all from private CIDRs; Outbound: all
+// ── IAM Roles ──
+IAM_SSM_Role [icon: aws-iam, label: "IAM Instance Profile\nssm-instance-profile\n(EC2 SSM access)"]
+IAM_ALB_Role [icon: aws-iam, label: "IRSA Role\nALB Controller\n(create ALBs)"]
+IAM_DNS_Role [icon: aws-iam, label: "IRSA Role\nExternalDNS\n(manage Route53)"]
+IAM_Devs_Group [icon: aws-iam, label: "IAM Group: Devs\nSSM Session Manager\nEKS access"]
 
-// EKS specifics
-SG_EKS_CL  // Outbound: 10250 to SG-EKS-NODES (kubelet); Inbound: managed by EKS
-SG_EKS_ND  // Inbound: 10250 from SG-EKS-CLUSTER; Inbound: 30080 (NodePort) from SG-ALB; Inbound: 22 from SG-BASTION (optional); Outbound: all (via NAT)
+// ══════════════════════════════════════════════════════════════════════════
+// CONNECTIVITY
+// ══════════════════════════════════════════════════════════════════════════
 
-// ── Connectivity (simplified with SG context) ──
-"Public subnet 10.0.1.0/24" > InternetGateway
-"Public subnet 10.0.3.0/24" > InternetGateway
-"Private subnet 10.0.2.0/24" > NAT_Instance
-"Private subnet 10.0.4.0/24" > NAT_Instance
+// ── Developer Access (SSM) ──
+Developer > SSM_Service: "IAM auth" [color: blue]
+SSM_Service > GitLab_Server: "Port-forward 80→8443" [color: blue]
+SSM_Service > Jenkins_Server: "Port-forward 8080→8080" [color: blue]
+SSM_Service > NAT_Instance: "Shell session" [color: blue]
+Developer > IAM_Devs_Group: "Member of"
 
-"Public subnet 10.0.1.0/24" > Public Route Table
-"Public subnet 10.0.3.0/24" > Public Route Table
-"Private subnet 10.0.2.0/24" > Private Route Table
-"Private subnet 10.0.4.0/24" > Private Route Table
+// ── Public Internet Flow ──
+Internet > InternetGateway
+InternetGateway > Public_Subnet_A
+InternetGateway > Public_Subnet_B
 
-// ALB to EKS via NodePort (example NodePort 30080)
-ALB > EKS_NG_A: "HTTP NodePort 30080"
-ALB > EKS_NG_B: "HTTP NodePort 30080"
+// ── NAT Flow (Egress) ──
+Private_Subnet_A > NAT_Instance: "Default route 0.0.0.0/0" [color: green]
+Private_Subnet_B > NAT_Instance: "Default route 0.0.0.0/0" [color: green]
+NAT_Instance > InternetGateway: "NAT to internet" [color: green]
 
-// Control plane ↔ Nodes
-EKS_Cluster > EKS_NG_A: "10250 (kubelet)"
-EKS_Cluster > EKS_NG_B: "10250 (kubelet)"
+// ── Route Tables ──
+Public_Subnet_A > Public_RT
+Public_Subnet_B > Public_RT
+Private_Subnet_A > Private_RT
+Private_Subnet_B > Private_RT
 
-// Bastion & Observability
-Bastion > "Private subnet 10.0.2.0/24": "SSH 22" [color: Orange]
-Prometheus > EKS_NG_A: "Scrape"
-Prometheus > EKS_NG_B: "Scrape"
+// ── CICD Internal Communication ──
+Jenkins_Server > GitLab_Server: "HTTP via private DNS\ngitlab-server.internal.local" [color: orange]
+EKS_Node_A > GitLab_Server: "HTTP port 80" [color: orange]
+EKS_Node_B > GitLab_Server: "HTTP port 80" [color: orange]
+EKS_Node_A > Jenkins_Server: "HTTP port 8080" [color: orange]
+EKS_Node_B > Jenkins_Server: "HTTP port 8080" [color: orange]
 
-// Pipeline (now targets the cluster, not EC2)
-JenkinsServer <-> JenkinsAgent: Build Commands [color: green]
-GitLab > JenkinsServer: Webhook [color: green]
-JenkinsAgent < GitLab: Checkout [color: green]
-JenkinsAgent > EKS_Cluster: "kubectl apply / helm" [color: green]
+// ── Private DNS Resolution ──
+Route53_Private > GitLab_Server: "A record\ngitlab-server.internal.local\n→ 10.10.12.43"
+Route53_Private > Jenkins_Server: "A record\njenkins-server.internal.local\n→ 10.10.11.72"
+Route53_Private > Main_VPC: "Attached to VPC"
 
-// External
-DockerHub [label: "DockerHub", icon: docker]
-Slack [label: "Slack", icon: slack]
-EKS_NG_A < DockerHub: "Pull via NAT"
-EKS_NG_B < DockerHub: "Pull via NAT"
-JenkinsAgent > DockerHub: "Push"
-JenkinsServer > Slack: "Notifications"
+// ── EKS Control Plane ↔ Nodes ──
+EKS_Cluster > EKS_Node_A: "Kubelet 10250" [color: purple]
+EKS_Cluster > EKS_Node_B: "Kubelet 10250" [color: purple]
+
+// ── Kubernetes Controllers ──
+ALB_Controller > IAM_ALB_Role: "IRSA (create ALBs)"
+ExternalDNS > IAM_DNS_Role: "IRSA (manage Route53)"
+ExternalDNS > Route53_Public: "Create/update DNS records"
+
+// ── DNS Delegation ──
+Cloudflare > Route53_Public: "NS delegation"
+
+// ── Certificate ──
+ACM > Route53_Public: "DNS validation"
+
+// ── External Dependencies ──
+GitLab_Server > DockerHub: "Pull gitlab image" [color: green]
+Jenkins_Server > DockerHub: "Pull jenkins image" [color: green]
+EKS_Node_A > DockerHub: "Pull app images" [color: green]
+EKS_Node_B > DockerHub: "Pull app images" [color: green]
+
+// ── IAM Attachments ──
+GitLab_Server > IAM_SSM_Role: "Instance profile"
+Jenkins_Server > IAM_SSM_Role: "Instance profile"
+NAT_Instance > IAM_SSM_Role: "Instance profile"
+
+// ══════════════════════════════════════════════════════════════════════════
+// NOTES
+// ══════════════════════════════════════════════════════════════════════════
+
+Architecture Highlights:
+- SSM-only access (no bastion, no SSH keys)
+- Private DNS for internal service discovery
+- Custom NAT instance (~$7/mo vs $45/mo NAT Gateway)
+- CICD in private subnets (GitLab + Jenkins)
+- EKS with public API (restricted to admin IPs + NAT IP)
+- IRSA for ALB Controller + ExternalDNS
+- ACM certificate with DNS validation
+- Route53 public zone delegated from Cloudflare
+
+🔵 Blue arrows = Developer SSM access paths
+🟢 Green arrows = Internet/NAT egress traffic
+🟠 Orange arrows = Internal CICD communication (via private DNS)
+🟣 Purple arrows = EKS control plane ↔ nodes

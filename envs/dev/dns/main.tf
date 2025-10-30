@@ -234,13 +234,3 @@ resource "aws_route53_record" "jenkins_server" {
 
   depends_on = [aws_route53_zone.internal]
 }
-
-# Create Cloudflare DNS records for app in the env subdomain pointing to R53 subdomain
-resource "cloudflare_dns_record" "apps_env_cnames" {
-  zone_id = local.cf_zone_id
-  name    = "weather.${var.env}.${var.base_domain}"
-  type    = "CNAME"
-  content = "weather.${local.env_fqdn_r53_base}"
-  ttl     = 120
-  proxied = false
-}

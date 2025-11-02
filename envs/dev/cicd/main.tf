@@ -77,12 +77,12 @@ locals {
 
   # Localhost communication variables
   # GitLab uses internal DNS for clone URLs (Jenkins/EKS can reach it)
-  gitlab_self_url      = "http://gitlab-server.vpc.internal"                          # GitLab self-reference (for clone URLs)
-  jenkins_self_url     = "http://localhost:8080"                                      # Jenkins self-reference
-  gitlab_for_jenkins   = "http://gitlab-server.vpc.internal"                          # How Jenkins reaches GitLab
-  jenkins_for_agents   = "http://jenkins-server.vpc.internal:8080"                    # How agents reach Jenkins
-  gitlab_external_url  = "https://localhost:8443"                                     # User access via SSM port-forward
-  jenkins_external_url = "https://localhost:8080"                                     # User access via SSM port-forward
+  gitlab_self_url      = "http://gitlab-server.vpc.internal"       # GitLab self-reference (for clone URLs)
+  jenkins_self_url     = "http://localhost:8080"                   # Jenkins self-reference
+  gitlab_for_jenkins   = "http://gitlab-server.vpc.internal"       # How Jenkins reaches GitLab
+  jenkins_for_agents   = "http://jenkins-server.vpc.internal:8080" # How agents reach Jenkins
+  gitlab_external_url  = "https://localhost:8443"                  # User access via SSM port-forward
+  jenkins_external_url = "https://localhost:8080"                  # User access via SSM port-forward
 
   gitlab_trusted_cidrs = (
     contains(keys(data.terraform_remote_state.network.outputs), "private_subnet_cidrs") && length(data.terraform_remote_state.network.outputs.private_subnet_cidrs) > 0 ?
@@ -134,10 +134,10 @@ module "ud_jenkins_server" {
   scripts = [
     "${path.module}/../../../modules/userdata/compose/jenkins_server.sh",
     templatefile("../../../modules/userdata/templates/jenkins_env.tpl", {
-      public_hostname = "jenkins-server.internal.local" # Internal FQDN
-      jenkins_url     = local.jenkins_self_url          # http://localhost:8080 (self)
-      gitlab_url      = local.gitlab_for_jenkins        # http://gitlab-server.internal.local (cross-service)
-      agent_override  = "jenkins-server.internal.local" # Internal FQDN
+      public_hostname = "jenkins-server.vpc.internal" # Internal FQDN
+      jenkins_url     = local.jenkins_self_url        # http://localhost:8080 (self)
+      gitlab_url      = local.gitlab_for_jenkins      # http://gitlab-server.vpc.internal (cross-service)
+      agent_override  = "jenkins-server.vpc.internal" # Internal FQDN
     })
   ]
 }
@@ -166,10 +166,10 @@ module "ud_gitlab" {
   scripts = [
     "${path.module}/../../../modules/userdata/compose/gitlab.sh",
     templatefile("../../../modules/userdata/templates/gitlab_env.tpl", {
-      external_url  = local.gitlab_self_url          # http://localhost (self-reference)
-      trusted_cidrs = local.gitlab_trusted_cidrs     # Private subnet CIDRs
-      trusted_array = local.gitlab_trusted_array     # Private subnet array
-      gitlab_host   = "gitlab-server.internal.local" # Internal FQDN
+      external_url  = local.gitlab_self_url        # http://localhost (self-reference)
+      trusted_cidrs = local.gitlab_trusted_cidrs   # Private subnet CIDRs
+      trusted_array = local.gitlab_trusted_array   # Private subnet array
+      gitlab_host   = "gitlab-server.vpc.internal" # Internal FQDN
     })
   ]
 }
@@ -203,7 +203,7 @@ module "ud_jenkins_agent" {
     "${path.module}/../../../modules/userdata/compose/jenkins_agent.sh",
     templatefile("../../../modules/userdata/templates/jenkins_agnt_env.tpl",
       {
-        jenkins_url = local.jenkins_for_agents # http://jenkins-server.internal.local:8080
+        jenkins_url = local.jenkins_for_agents # http://jenkins-server.vpc.internal:8080
     })
   ]
 }

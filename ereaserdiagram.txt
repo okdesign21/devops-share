@@ -10,7 +10,7 @@ DockerHub [icon: docker, label: "Docker Hub"]
 // ── AWS Services ──
 SSM_Service [icon: aws-systems-manager, label: "AWS Systems Manager\nSession Manager"]
 Route53_Public [icon: aws-route-53, label: "Route53 Public Zone\nr53.infinity.ortflix.uk"]
-Route53_Private [icon: aws-route-53, label: "Route53 Private Zone\ninternal.local"]
+Route53_Private [icon: aws-route-53, label: "Route53 Private Zone\nvpc.internal"]
 ACM [icon: aws-certificate-manager, label: "ACM Certificate\n*.dev.r53.infinity.ortflix.uk"]
 
 Main_VPC [label: "VPC: 10.10.0.0/16 (proj-dev)", icon: aws-vpc] {
@@ -90,15 +90,15 @@ Private_Subnet_A > Private_RT
 Private_Subnet_B > Private_RT
 
 // ── CICD Internal Communication ──
-Jenkins_Server > GitLab_Server: "HTTP via private DNS\ngitlab-server.internal.local" [color: orange]
+Jenkins_Server > GitLab_Server: "HTTP via private DNS\ngitlab-server.vpc.internal" [color: orange]
 EKS_Node_A > GitLab_Server: "HTTP port 80" [color: orange]
 EKS_Node_B > GitLab_Server: "HTTP port 80" [color: orange]
 EKS_Node_A > Jenkins_Server: "HTTP port 8080" [color: orange]
 EKS_Node_B > Jenkins_Server: "HTTP port 8080" [color: orange]
 
 // ── Private DNS Resolution ──
-Route53_Private > GitLab_Server: "A record\ngitlab-server.internal.local\n→ 10.10.12.43"
-Route53_Private > Jenkins_Server: "A record\njenkins-server.internal.local\n→ 10.10.11.72"
+Route53_Private > GitLab_Server: "A record\ngitlab-server.vpc.internal\n→ 10.10.12.43"
+Route53_Private > Jenkins_Server: "A record\njenkins-server.vpc.internal\n→ 10.10.11.72"
 Route53_Private > Main_VPC: "Attached to VPC"
 
 // ── EKS Control Plane ↔ Nodes ──

@@ -8,14 +8,14 @@ Use internal DNS for GitLab repository access:
 # In ArgoCD Application manifest:
 spec:
   source:
-    repoURL: http://gitlab-server.internal.local/your-username/your-repo.git
+  repoURL: http://gitlab-server.vpc.internal/your-username/your-repo.git
     path: k8s-manifests
     targetRevision: HEAD
 ```
 
 **How it works:**
-- Private Route53 zone `internal.local` is attached to your VPC
-- DNS A record: `gitlab-server.internal.local` → GitLab private IP
+- Private Route53 zone `vpc.internal` is attached to your VPC
+- DNS A record: `gitlab-server.vpc.internal` → GitLab private IP
 - EKS pods automatically use VPC DNS resolver
 - GitLab is accessible from anywhere in the VPC!
 

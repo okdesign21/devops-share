@@ -42,7 +42,7 @@ Private Subnets (10.10.11.0/24, 10.10.12.0/24):
 - **Jenkins Agents**: Ephemeral build executors (auto-registered via JCasC)
 
 ### **Auto-Configuration Features**
-- **Jenkins URL**: Automatically set via JCasC to `http://jenkins-server.internal.local:8080`
+- **Jenkins URL**: Automatically set via JCasC to `http://jenkins-server.vpc.internal:8080`
 - **Agent Registration**: Agents auto-register via JCasC configuration
 - **Agent Secret Distribution**: Jenkins publishes agent secret via HTTP endpoint on port 8081
 - **Plugin Installation**: Automatic installation of required plugins on startup
@@ -63,15 +63,15 @@ jenkins-web       # Opens Jenkins at http://localhost:8080
 ### **Internal Communication**
 - **GitLab self-reference**: `http://localhost` (container → localhost)
 - **Jenkins self-reference**: `http://localhost:8080` (container → localhost)
-- **Jenkins → GitLab**: `http://gitlab-server.internal.local` (via private DNS)
-- **Jenkins ← Agents**: `http://jenkins-server.internal.local:8080` (via private DNS)
-- **Agent Secret Exchange**: `http://jenkins-server.internal.local:8081/docker-secret.txt` (via nginx sidecar)
+- **Jenkins → GitLab**: `http://gitlab-server.vpc.internal` (via private DNS)
+- **Jenkins ← Agents**: `http://jenkins-server.vpc.internal:8080` (via private DNS)
+- **Agent Secret Exchange**: `http://jenkins-server.vpc.internal:8081/docker-secret.txt` (via nginx sidecar)
 
 ### **Jenkins Agent Auto-Registration Flow**
 1. Jenkins server starts → JCasC creates agent node named "docker"
 2. Groovy init script extracts agent secret → writes to `/var/jenkins_home/agent-secrets/docker-secret.txt`
 3. Nginx sidecar container serves secrets directory on port 8081
-4. Agent EC2 instance fetches secret from `http://jenkins-server.internal.local:8081/docker-secret.txt`
+4. Agent EC2 instance fetches secret from `http://jenkins-server.vpc.internal:8081/docker-secret.txt`
 5. Agent connects automatically using WebSocket protocol
 
 
@@ -91,11 +91,11 @@ Apps: app.dev.r53.infinity.ortflix.uk → ALB
 
 ### **Private DNS (Route53 Private Zone)**
 ```
-Zone: internal.local (VPC-scoped)
+Zone: vpc.internal (VPC-scoped)
 
 Records:
-  gitlab-server.internal.local  → 10.10.11.X
-  jenkins-server.internal.local → 10.10.11.Y
+  gitlab-server.vpc.internal  → 10.10.11.X
+  jenkins-server.vpc.internal → 10.10.11.Y
 ```
 
 **Purpose**: Clean hostname resolution for internal services (GitLab, Jenkins, ArgoCD)
@@ -168,7 +168,7 @@ SANs:
 # ArgoCD Application manifest
 spec:
   source:
-    repoURL: http://gitlab-server.internal.local/user/repo.git
+  repoURL: http://gitlab-server.vpc.internal/user/repo.git
     path: k8s-manifests
     targetRevision: HEAD
   destination:
@@ -192,7 +192,7 @@ spec:
 - ✅ **SSM access**: Can troubleshoot NAT via SSM
 
 ### **Why Private DNS Zone?**
-- ✅ **Clean URLs**: `gitlab-server.internal.local` vs `10.10.11.42`
+- ✅ **Clean URLs**: `gitlab-server.vpc.internal` vs `10.10.11.42`
 - ✅ **Maintainable**: IP changes don't break configs
 - ✅ **Standard**: Industry best practice for internal DNS
 
@@ -208,7 +208,7 @@ spec:
 ### **Network Connectivity**
 ```bash
 # Test private DNS resolution from EKS
-kubectl run test --image=busybox --rm -it -- nslookup gitlab-server.internal.local
+kubectl run test --image=busybox --rm -it -- nslookup gitlab-server.vpc.internal
 
 # Test SSM access to GitLab
 aws ssm start-session --target $(terraform -chdir=envs/dev/cicd output -raw gitlab_server_id)

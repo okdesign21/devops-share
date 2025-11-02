@@ -53,7 +53,7 @@ make destroy STACK=network ENV=dev
 
 ### **3. DNS** (`envs/dev/dns/`)
 - Route53 public zone (delegated from Cloudflare)
-- Route53 private zone (`internal.local`)
+  - Route53 private zone (`vpc.internal`)
 - ACM certificate with DNS validation
 - ExternalDNS IRSA role
 
@@ -117,7 +117,7 @@ ALB → EKS Apps
 
 Private Access:
 Developer → SSM → GitLab/Jenkins (private subnets)
-EKS Pods → Private DNS → gitlab-server.internal.local
+EKS Pods → Private DNS → gitlab-server.vpc.internal
 ```
 
 **See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed diagrams and explanations.**
@@ -143,7 +143,7 @@ graph TD
 ## 🎯 **Key Features**
 
 - ✅ **SSM-Only Access**: No bastion hosts or public IPs for CICD
-- ✅ **Private DNS**: Clean hostnames (`gitlab-server.internal.local`)
+- ✅ **Private DNS**: Clean hostnames (`gitlab-server.vpc.internal`)
 - ✅ **Cost-Optimized**: Custom NAT instance (~$7/mo vs ~$45/mo)
 - ✅ **Automated Certificates**: ACM + DNS validation
 - ✅ **GitOps Ready**: ArgoCD uses private DNS for repository access
@@ -210,7 +210,7 @@ aws ec2 describe-instances --filters "Name=tag:Name,Values=proj-nat"
 ```bash
 # Check private DNS resolution from EKS
 kubectl run test --image=busybox --rm -it -- \
-  nslookup gitlab-server.internal.local
+  nslookup gitlab-server.vpc.internal
 ```
 
 ### **Verify Certificate**

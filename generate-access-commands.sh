@@ -154,10 +154,10 @@ kubectl get pods -A
 ### Test private DNS from inside cluster
 \`\`\`bash
 # Test GitLab DNS resolution
-kubectl run dns-test --image=busybox:1.28 --rm -it --restart=Never -- nslookup gitlab-server.internal.local
+kubectl run dns-test --image=busybox:1.28 --rm -it --restart=Never -- nslookup gitlab-server.vpc.internal
 
 # Test Jenkins DNS resolution
-kubectl run dns-test --image=busybox:1.28 --rm -it --restart=Never -- nslookup jenkins-server.internal.local
+kubectl run dns-test --image=busybox:1.28 --rm -it --restart=Never -- nslookup jenkins-server.vpc.internal
 \`\`\`
 
 ---
@@ -327,7 +327,7 @@ aws route53 list-resource-record-sets \\
 
 # List private zone records
 aws route53 list-resource-record-sets \\
-  --hosted-zone-id \$(aws route53 list-hosted-zones --query "HostedZones[?Name=='internal.local.'].Id" --output text | cut -d'/' -f3)
+  --hosted-zone-id \$(aws route53 list-hosted-zones --query "HostedZones[?Name=='vpc.internal.'].Id" --output text | cut -d'/' -f3)
 \`\`\`
 
 ### Check EKS node health
@@ -359,7 +359,7 @@ kubectl logs -n external-dns -l app.kubernetes.io/name=external-dns --tail=100 -
 ### CICD Services
 - **GitLab Private IP:** \`${GITLAB_IP}\`
 - **Jenkins Private IP:** \`${JENKINS_IP}\`
-- **Private DNS Zone:** \`internal.local\`
+- **Private DNS Zone:** \`vpc.internal\`
 
 ### DNS
 - **Public Zone:** \`r53.infinity.ortflix.uk\`

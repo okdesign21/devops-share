@@ -135,25 +135,25 @@ else
 fi
 
 info "Checking private DNS zone..."
-PRIVATE_ZONE=$(aws route53 list-hosted-zones --query "HostedZones[?Name=='internal.local.'].Id" --output text 2>/dev/null | cut -d'/' -f3)
+PRIVATE_ZONE=$(aws route53 list-hosted-zones --query "HostedZones[?Name=='vpc.internal.'].Id" --output text 2>/dev/null | cut -d'/' -f3)
 if [ -n "$PRIVATE_ZONE" ]; then
     success "Private zone exists: $PRIVATE_ZONE"
     
     # Check DNS records
     info "Checking GitLab DNS record..."
     GITLAB_DNS=$(aws route53 list-resource-record-sets --hosted-zone-id "$PRIVATE_ZONE" \
-        --query "ResourceRecordSets[?Name=='gitlab-server.internal.local.'].ResourceRecords[0].Value" --output text 2>/dev/null)
+    --query "ResourceRecordSets[?Name=='gitlab-server.vpc.internal.'].ResourceRecords[0].Value" --output text 2>/dev/null)
     if [ "$GITLAB_DNS" == "$GITLAB_IP" ]; then
-        success "GitLab DNS record: gitlab-server.internal.local → $GITLAB_DNS"
+    success "GitLab DNS record: gitlab-server.vpc.internal → $GITLAB_DNS"
     else
         error "GitLab DNS mismatch (expected: $GITLAB_IP, got: $GITLAB_DNS)"
     fi
     
     info "Checking Jenkins DNS record..."
     JENKINS_DNS=$(aws route53 list-resource-record-sets --hosted-zone-id "$PRIVATE_ZONE" \
-        --query "ResourceRecordSets[?Name=='jenkins-server.internal.local.'].ResourceRecords[0].Value" --output text 2>/dev/null)
+    --query "ResourceRecordSets[?Name=='jenkins-server.vpc.internal.'].ResourceRecords[0].Value" --output text 2>/dev/null)
     if [ "$JENKINS_DNS" == "$JENKINS_IP" ]; then
-        success "Jenkins DNS record: jenkins-server.internal.local → $JENKINS_DNS"
+    success "Jenkins DNS record: jenkins-server.vpc.internal → $JENKINS_DNS"
     else
         error "Jenkins DNS mismatch (expected: $JENKINS_IP, got: $JENKINS_DNS)"
     fi
@@ -238,8 +238,8 @@ if timeout 120 kubectl wait --for=condition=Ready pod/network-test --timeout=120
     info "=== Internal Communication Tests ==="
     
     # Test 1: Private DNS resolution
-    info "Test 1: Resolving gitlab-server.internal.local..."
-    GITLAB_RESOLVED=$(timeout 10 kubectl exec network-test -- nslookup gitlab-server.internal.local 2>/dev/null | grep "Address:" | tail -1 | awk '{print $2}' || echo "")
+    info "Test 1: Resolving gitlab-server.vpc.internal..."
+    GITLAB_RESOLVED=$(timeout 10 kubectl exec network-test -- nslookup gitlab-server.vpc.internal 2>/dev/null | grep "Address:" | tail -1 | awk '{print $2}' || echo "")
     if [ "$GITLAB_RESOLVED" == "$GITLAB_IP" ]; then
         success "GitLab DNS resolves to private IP: $GITLAB_IP"
     else
@@ -247,8 +247,8 @@ if timeout 120 kubectl wait --for=condition=Ready pod/network-test --timeout=120
     fi
     
     # Test 2: Private DNS resolution for Jenkins
-    info "Test 2: Resolving jenkins-server.internal.local..."
-    JENKINS_RESOLVED=$(timeout 10 kubectl exec network-test -- nslookup jenkins-server.internal.local 2>/dev/null | grep "Address:" | tail -1 | awk '{print $2}' || echo "")
+    info "Test 2: Resolving jenkins-server.vpc.internal..."
+    JENKINS_RESOLVED=$(timeout 10 kubectl exec network-test -- nslookup jenkins-server.vpc.internal 2>/dev/null | grep "Address:" | tail -1 | awk '{print $2}' || echo "")
     if [ "$JENKINS_RESOLVED" == "$JENKINS_IP" ]; then
         success "Jenkins DNS resolves to private IP: $JENKINS_IP"
     else

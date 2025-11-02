@@ -2,7 +2,7 @@
 ENV            ?= dev
 PROJECT_NAME   ?= proj
 STACK          ?= all
-DEV_STACKS         := network cicd dns eks
+DEV_STACKS         := network cicd eks dns
 PROD_STACKS        := network eks dns
 STAGGED_STACKS     := network eks dns
 STACKS         := $(if $(filter prod,$(ENV)),$(PROD_STACKS),$(if $(filter stagged,$(ENV)),$(STAGGED_STACKS),$(DEV_STACKS)))

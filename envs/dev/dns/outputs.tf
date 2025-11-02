@@ -36,7 +36,7 @@ output "internal_zone_id" {
 }
 
 output "internal_zone_name" {
-  description = "Private zone domain name (internal.local)"
+  description = "Private zone domain name (vpc.internal)"
   value       = aws_route53_zone.internal.name
 }
 

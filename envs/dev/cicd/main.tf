@@ -17,7 +17,7 @@ data "aws_ami" "jenkins_lookup" {
   owners      = length(var.ami_owner_ids) > 0 ? var.ami_owner_ids : [data.aws_caller_identity.me.account_id]
 
   filter {
-    name   = "tag:type"
+    name   = "tag:Type"
     values = ["jenkins"]
   }
   filter {
@@ -32,7 +32,7 @@ data "aws_ami" "gitlab_lookup" {
   owners      = length(var.ami_owner_ids) > 0 ? var.ami_owner_ids : [data.aws_caller_identity.me.account_id]
 
   filter {
-    name   = "tag:type"
+    name   = "tag:Type"
     values = ["gitlab"]
   }
   filter {

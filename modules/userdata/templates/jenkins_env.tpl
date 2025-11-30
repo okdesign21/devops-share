@@ -55,28 +55,31 @@ import jenkins.model.Jenkins
 import hudson.model.Computer
 import java.io.File
 
-// Wait for agent node to be created
-sleep(5000)
-
 def agentName = "docker"
-Computer computer = Jenkins.instance.getComputer(agentName)
+def maxAttempts = 120  // ~10 minutes
+def attempt = 0
+def secret = null
 
-if (computer != null) {
-    def secret = computer.getJnlpMac()
-    
-    if (secret) {
-        // Write to a file in Jenkins home that can be read by agents
-        def secretFile = new File('/var/jenkins_home/agent-secrets/docker-secret.txt')
-        secretFile.getParentFile().mkdirs()
-        secretFile.text = secret
-        
-        println "Agent 'docker' secret written to: $${secretFile.absolutePath}"
-        println "Agent 'docker' secret: $${secret}"
-    } else {
-        println "WARNING: Could not get secret for agent 'docker'"
+while (attempt < maxAttempts && (secret == null || secret.trim().isEmpty())) {
+  attempt++
+  def computer = Jenkins.instance.getComputer(agentName)
+  if (computer != null) {
+    secret = computer.getJnlpMac()
+    if (secret && !secret.trim().isEmpty()) {
+      break
     }
+  }
+  println "Waiting for agent 'docker' and its secret (attempt $${attempt}/$${maxAttempts})..."
+  Thread.sleep(5000)
+}
+
+if (secret && !secret.trim().isEmpty()) {
+  def secretFile = new File('/var/jenkins_home/agent-secrets/docker-secret.txt')
+  secretFile.getParentFile().mkdirs()
+  secretFile.text = secret
+  println "Agent 'docker' secret written to: $${secretFile.absolutePath}"
 } else {
-    println "WARNING: Agent 'docker' not found"
+  println "WARNING: Agent 'docker' secret not available after waiting. Agent may not be able to connect."
 }
 GROOVY
 
@@ -100,6 +103,39 @@ chmod -R 755 /opt/jenkins/config
 mkdir -p /opt/jenkins/agent-secrets
 chown 1000:1000 /opt/jenkins/agent-secrets
 chmod 755 /opt/jenkins/agent-secrets
+
+# Create an init script to mark the agent as ONLINE when connected
+cat > /opt/jenkins/config/init.groovy.d/mark-agent-online.groovy <<'GROOVY'
+import jenkins.model.Jenkins
+import hudson.model.Computer
+import java.io.File
+
+def agentName = "docker"
+def maxAttempts = 120 // ~10 minutes
+def attempt = 0
+
+File dir = new File('/var/jenkins_home/agent-secrets')
+dir.mkdirs()
+File ready = new File(dir, 'docker-ready')
+File timeout = new File(dir, 'docker-timeout')
+
+while (attempt < maxAttempts) {
+  attempt++
+  Computer c = Jenkins.instance.getComputer(agentName)
+  if (c != null && !c.isOffline()) {
+    ready.text = 'online\n'
+    println "Agent '$agentName' is ONLINE. Wrote marker to $${ready.absolutePath}"
+    break
+  }
+  println "Waiting for agent '$agentName' to come online (attempt $${attempt}/$${maxAttempts})..."
+  Thread.sleep(5000)
+}
+
+if (!ready.exists()) {
+  timeout.text = 'timeout\n'
+  println "WARNING: Agent '$agentName' did not become ONLINE within timeout. Wrote $${timeout.absolutePath}"
+}
+GROOVY
 
 # Create plugin list
 cat > /opt/jenkins/config/plugins.txt <<'PLUGINS'

@@ -6,8 +6,18 @@ Multi-stack Terraform infrastructure for development and production environments
 
 ### **Prerequisites**
 - Terraform ≥ 1.5
-- AWS CLI v2 configured
-- Access to S3 backend: `tfstate-inf-orinbar-euc1`
+- AWS CLI v2 configured & credentials allowing required AWS services
+- Access to S3 backend bucket: `tfstate-inf-orinbar-euc1` (already created)
+- Cloudflare zone (e.g. `infinity.ortflix.uk`) + API token with DNS write permissions
+- IAM group `Devs` exists (SSM access policy attaches automatically)
+- Optional: Pre-baked AMIs tagged `type=jenkins` and `type=gitlab` (else leave AMI vars empty)
+
+### **Provisioning Order (Dev)**
+Order matters due to remote state dependencies:
+1. `network` (provides VPC, subnets, SSM profile, NAT)
+2. `cicd` (needs private subnet IDs & SSM profile)
+3. `eks` (needs VPC subnets; creates OIDC provider & IRSA roles)
+4. `dns` (needs CICD private IPs for A records + EKS OIDC provider ARN)
 
 ### **Deployment**
 ```bash
@@ -16,21 +26,25 @@ make init ENV=dev
 
 # Deploy all stacks in order
 make apply STACK=network ENV=dev
-make apply STACK=cicd ENV=dev  
-make apply STACK=dns ENV=dev
+make apply STACK=cicd ENV=dev
 make apply STACK=eks ENV=dev
+make apply STACK=dns ENV=dev
 
-# Generate access guide and aliases
+# Generate access guide and SSM aliases
 make access-guide
 make ssm-aliases
 source ~/.ssm-aliases
+
+# Verify infrastructure
+./scripts/verify-infrastructure.sh
 ```
 
 ### **Destroy**
+Destroy in strict reverse dependency order:
 ```bash
 # Destroy in reverse order
-make destroy STACK=eks ENV=dev
 make destroy STACK=dns ENV=dev
+make destroy STACK=eks ENV=dev
 make destroy STACK=cicd ENV=dev
 make destroy STACK=network ENV=dev
 ```
@@ -65,7 +79,14 @@ make destroy STACK=network ENV=dev
 
 ---
 
-## 🔐 **Access Patterns**
+## 🔐 **Access & Security Model**
+
+- All CICD instances are in private subnets (no public IPs).
+- Access via AWS Systems Manager (SSM) Session Manager port-forwarding.
+- Security group model: SSM-only SG for Jenkins/GitLab, internal VPC communication allowed.
+- Policy restricts SSM start-session by tags (`Project`, `Environment`).
+- EKS API public access is IP-restricted (`home_ip`, `lab_ip`, plus NAT instance /32).
+- Cloudflare → Route53 delegation only created automatically for `env == dev`.
 
 ### **Quick Access (Using Aliases)**
 ```bash
@@ -82,13 +103,13 @@ ssm-jenkins-shell # SSH into Jenkins server
 
 ### **Manual SSM Port-Forward (if needed)**
 ```bash
-# GitLab (localhost:8443)
-aws ssm start-session --target <gitlab-instance-id> \
+# GitLab (forward container HTTPS -> local 8443)
+aws ssm start-session --target <gitlab_instance_id> \
   --document-name AWS-StartPortForwardingSession \
   --parameters '{"portNumber":["80"],"localPortNumber":["8443"]}'
 
-# Jenkins (localhost:8080)
-aws ssm start-session --target <jenkins-instance-id> \
+# Jenkins (forward server 8080 -> local 8080)
+aws ssm start-session --target <jenkins_instance_id> \
   --document-name AWS-StartPortForwardingSession \
   --parameters '{"portNumber":["8080"],"localPortNumber":["8080"]}'
 ```
@@ -104,51 +125,6 @@ $(terraform -chdir=envs/dev/eks output -raw kubeconfig_command)
 
 ---
 
-## 🌍 **Architecture**
-
-```
-Internet
-    ↓
-Cloudflare: infinity.ortflix.uk
-    ↓ (NS delegation)
-Route53: r53.infinity.ortflix.uk
-    ↓ (ExternalDNS)
-ALB → EKS Apps
-
-Private Access:
-Developer → SSM → GitLab/Jenkins (private subnets)
-EKS Pods → Private DNS → gitlab-server.vpc.internal
-```
-
-**See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed diagrams and explanations.**
-
----
-
-## 📊 **Deployment Order**
-
-```mermaid
-graph TD
-    A[network] --> B[cicd]
-    A --> C[eks]
-    B --> D[dns]
-    C --> D
-```
-
-**Dependencies:**
-- `dns` requires `cicd` (for private IPs) and `eks` (for IRSA ARN)
-- `cicd` and `eks` both require `network` (VPC, subnets)
-
----
-
-## 🎯 **Key Features**
-
-- ✅ **SSM-Only Access**: No bastion hosts or public IPs for CICD
-- ✅ **Private DNS**: Clean hostnames (`gitlab-server.vpc.internal`)
-- ✅ **Cost-Optimized**: Custom NAT instance (~$7/mo vs ~$45/mo)
-- ✅ **Automated Certificates**: ACM + DNS validation
-- ✅ **GitOps Ready**: ArgoCD uses private DNS for repository access
-- ✅ **IRSA**: EKS service accounts with IAM roles
-
 ## 🔧 **Make Commands**
 
 ```bash
@@ -160,66 +136,76 @@ make output ENV=dev         # Show outputs
 make validate ENV=dev       # Validate configurations
 make fmt ENV=dev            # Format Terraform files
 
-# New helper commands
+# Helper commands
 make access-guide           # Generate INFRASTRUCTURE_ACCESS.md
 make ssm-aliases            # Generate shell aliases for SSM
 ```
 
 ---
 
+## 🛠️ **Utility Scripts**
+
+Located in `scripts/` directory:
+
+### **Access & Setup**
+- **`generate-access-commands.sh`**: Creates comprehensive access guide (INFRASTRUCTURE_ACCESS.md)
+- **`generate-ssm-aliases.sh`**: Generates shell aliases for SSM port-forwarding and sessions
+  ```bash
+  ./scripts/generate-ssm-aliases.sh
+  source ~/.ssm-aliases
+  gitlab-web  # Quick access to GitLab
+  ```
+
+### **Verification & Monitoring**
+- **`verify-infrastructure.sh`**: Validates all infrastructure components
+  ```bash
+  ./scripts/verify-infrastructure.sh
+  # Checks: VPC, NAT, CICD instances, EKS cluster, DNS, certificates
+  ```
+
+### **Maintenance**
+- **`cleanup-jenkins-disk.sh`**: Cleans Jenkins server disk space
+  - Shows current usage
+  - Cleans workspace, logs, and Docker images
+  - Interactive cleanup options
+
+- **`cleanup-jenkins-agent-disk.sh`**: Cleans Jenkins agent disk space
+  - Similar to server cleanup but for agent instances
+
+- **`debug-jenkins-agent.sh`**: Comprehensive Jenkins agent diagnostics
+  - Checks agent connectivity
+  - Validates DNS resolution
+  - Reviews Docker and container status
+  - Analyzes logs
+
+### **AMI Management**
+- **`create-ami-snapshots.sh`**: Creates AMI snapshots of Jenkins/GitLab servers
+  ```bash
+  ./scripts/create-ami-snapshots.sh
+  # Interactive menu: Jenkins only, GitLab only, or both
+  # Creates tagged AMIs without waiting for availability
+  ```
+
+---
+
 ## 📚 **Documentation**
 
-- **[INFRASTRUCTURE_ACCESS.md](INFRASTRUCTURE_ACCESS.md)**: Complete access guide (auto-generated)
+- **[INFRASTRUCTURE_ACCESS.md](INFRASTRUCTURE_ACCESS.md)**: Complete access guide (auto-generated via `make access-guide`)
 - **[ARCHITECTURE.md](ARCHITECTURE.md)**: Detailed architecture overview
 - **[K8S_INTEGRATION.md](K8S_INTEGRATION.md)**: Kubernetes manifests and setup
 - **[Makefile](Makefile)**: Available commands
 
----
+### **Quick Script Reference**
 
-## 🔧 **Configuration**
-
-### **Common Variables** (`envs/common.tfvars`)
-```hcl
-project_name  = "proj"
-region        = "eu-central-1"
-state_bucket  = "tfstate-inf-orinbar-euc1"
-base_domain   = "infinity.ortflix.uk"
-```
-
-### **Environment Variables** (`envs/dev/dev-common.tfvars`)
-```hcl
-env = "dev"
-```
-
-### **Stack-Specific** (`envs/dev/<stack>/terraform.tfvars`)
-- Network: VPC CIDR, NAT instance size
-- CICD: Instance types, volume sizes
-- EKS: Node count, instance types
-
----
-
-## 🧪 **Testing**
-
-### **Verify Network**
-```bash
-# Check NAT instance
-aws ec2 describe-instances --filters "Name=tag:Name,Values=proj-nat"
-```
-
-### **Verify DNS**
-```bash
-# Check private DNS resolution from EKS
-kubectl run test --image=busybox --rm -it -- \
-  nslookup gitlab-server.vpc.internal
-```
-
-### **Verify Certificate**
-```bash
-# Check ACM certificate status
-CERT_ARN=$(terraform -chdir=envs/dev/dns output -raw app_certificate_arn)
-aws acm describe-certificate --certificate-arn "$CERT_ARN" \
-  --query 'Certificate.Status' --output text
-```
+| Script | Purpose | Usage |
+|--------|---------|-------|
+| `generate-access-commands.sh` | Creates access documentation | `make access-guide` |
+| `generate-ssm-aliases.sh` | Creates shell aliases | `make ssm-aliases` then `source ~/.ssm-aliases` |
+| `verify-infrastructure.sh` | Validates all components | `./scripts/verify-infrastructure.sh` |
+| `create-ami-snapshots.sh` | Creates CICD AMI backups | `./scripts/create-ami-snapshots.sh` |
+| `cleanup-jenkins-disk.sh` | Cleans Jenkins disk space | `./scripts/cleanup-jenkins-disk.sh` |
+| `cleanup-jenkins-agent-disk.sh` | Cleans agent disk space | `./scripts/cleanup-jenkins-agent-disk.sh` |
+| `debug-jenkins-agent.sh` | Diagnoses agent issues | `./scripts/debug-jenkins-agent.sh` |
 
 ---
 
@@ -234,39 +220,76 @@ Production environment structure is ready in `envs/prod/`. To populate:
 
 ---
 
-## 💡 **Troubleshooting**
+## 📝 **Maintenance & Scaling**
 
-### **Terraform State Issues**
-```bash
-# Re-initialize backend
-make init ENV=dev
+### **Regular Maintenance**
+- **Disk Cleanup**: Run cleanup scripts when Jenkins disk usage is high
+  ```bash
+  ./scripts/cleanup-jenkins-disk.sh
+  ./scripts/cleanup-jenkins-agent-disk.sh
+  ```
 
-# Import existing resource
-terraform import -var-file=../../common.tfvars \
-  aws_key_pair.gen[0] proj-dev-key
-```
+- **Create AMI Snapshots**: Before major changes or regularly for backups
+  ```bash
+  ./scripts/create-ami-snapshots.sh
+  ```
 
-### **SSM Session Not Working**
-- Verify instance has SSM agent running
-- Check IAM instance profile attached
-- Verify security group allows outbound 443
+- **Debug Agent Issues**: When Jenkins agents fail to connect
+  ```bash
+  ./scripts/debug-jenkins-agent.sh
+  ```
 
-### **DNS Not Resolving**
-- Confirm private zone attached to VPC
-- Check A records created with correct IPs
-- Verify VPC DNS settings enabled
-
----
-
-## 📝 **Maintenance**
-
-- Update Terraform providers: `terraform init -upgrade`
+### **Scaling & Updates**
+- Adjust node count: edit `desired_size` in `eks.auto.tfvars` then `make apply STACK=eks ENV=dev`
+- Upgrade EKS: bump `cluster_version`, apply; addons upgrade automatically
+- Rotate SSH key: destroy `network` stack (or remove key resources) and re-apply; new PEM written under `envs/dev/network/`
+- NAT Cost: Custom NAT instance (~$7/mo t3.micro) vs AWS NAT Gateway (~$45+). Monitor bandwidth usage
+- Provider upgrades: `terraform init -upgrade` inside each stack directory
+- Certificate renewal: Automatic via ACM init -upgrade`
 - Rotate SSH keys: Regenerate via `keygen.tf`
 - Update EKS version: Change `cluster_version` variable
 - Certificate renewal: Automatic via ACM
 
 ---
 
-**Status: Production Ready** ✅
+## ✅ **Status**
+
+Dev environment workflow & docs complete. Production templates scaffolded; finalize CIDRs, instance sizing, and stricter IP allow list before marking prod ready.
+
+**Status: Dev Ready / Prod Configurable**
 
 For detailed architecture explanations, see [ARCHITECTURE.md](ARCHITECTURE.md).
+### **Scaling & Updates**
+- Adjust node count: edit `desired_size` in `eks.auto.tfvars` then `make apply STACK=eks ENV=dev`
+- Upgrade EKS: bump `cluster_version`, apply; addons upgrade automatically
+- Rotate SSH key: destroy `network` stack (or remove key resources) and re-apply
+- Provider upgrades: `terraform init -upgrade` inside each stack directory
+
+---
+
+## 🔧 **Configuration**
+
+### **Variable Management**
+Layered configuration using:
+- `envs/dev/dev-common.tfvars` - Shared settings
+- `envs/dev/*/*.auto.tfvars` - Stack-specific overrides
+
+### **Cloudflare Token**
+```bash
+export TF_VAR_cloudflare_api_token="<your_token>"
+```
+Or add to `envs/dev/dns/secrets.auto.tfvars` (don't commit)
+
+### **AMI Resolution**
+Leave AMI vars empty to auto-lookup by tag `type=jenkins|gitlab`, or specify explicit AMI IDs.
+
+**See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed technical architecture.**
+
+---
+
+## ✅ **Status**
+
+**Dev: Ready for Production Use** ✅  
+**Prod: Templates Ready** (configure CIDRs and sizing)
+
+For architecture details, design decisions, and technical deep-dives, see [ARCHITECTURE.md](ARCHITECTURE.md).

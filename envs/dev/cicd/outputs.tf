@@ -40,3 +40,8 @@ output "jenkins_private_ip" {
 output "gitlab_private_ip" {
   value = module.gitlab.private_ip
 }
+
+output "jenkins_agent_ids" {
+  description = "Map of Jenkins agent instance IDs"
+  value       = { for k, v in module.jenkins_agent : k => v.instance_id }
+}

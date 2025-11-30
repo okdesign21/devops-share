@@ -20,7 +20,6 @@ REVERSE_STACKS := $(if $(filter all,$(STACK)),$(shell echo $(STACKS) | awk '{for
 init:
 	@for s in $(STACK_LIST) ; do \
 		echo "== terraform init $$s (ENV=$(ENV)) =="; \
-		# build per-stack key from envs/common.tfvars (state_prefix) and current ENV/stack \
 		KEY="$(PROJECT_NAME)/$(ENV)/$$s/terraform.tfstate"; \
 		terraform -chdir=envs/$(ENV)/$$s init -input=false -reconfigure -backend-config=$(BACKEND_FILE) -backend-config="key=$$KEY" || exit 1; \
 	done

@@ -27,6 +27,8 @@ spec:
 ```bash
 # Generate complete access guide with all IDs and commands
 make access-guide
+# Or directly:
+./scripts/generate-access-commands.sh
 
 # View the guide
 cat INFRASTRUCTURE_ACCESS.md
@@ -39,7 +41,22 @@ The generated guide includes:
 - Sample application deployments
 - All necessary kubectl commands
 
-### 2. Update Kubeconfig
+### 2. Generate SSM Aliases (Optional but Recommended)
+```bash
+# Generate quick-access aliases for GitLab and Jenkins
+make ssm-aliases
+# Or directly:
+./scripts/generate-ssm-aliases.sh
+
+# Load aliases
+source ~/.ssm-aliases
+
+# Quick access
+gitlab-web     # Opens GitLab at http://localhost:8443
+jenkins-web    # Opens Jenkins at http://localhost:8080
+```
+
+### 3. Update Kubeconfig
 ```bash
 # Get the command from Terraform
 terraform -chdir=envs/dev/eks output -raw kubeconfig_command
@@ -48,7 +65,7 @@ terraform -chdir=envs/dev/eks output -raw kubeconfig_command
 aws eks update-kubeconfig --name proj-dev-cluster --region eu-central-1
 ```
 
-### 3. Install Controllers
+### 4. Install Controllers
 
 Follow the commands in `INFRASTRUCTURE_ACCESS.md` to install:
 - **AWS Load Balancer Controller** (with pre-filled cluster name and role ARN)
@@ -71,6 +88,20 @@ Just copy-paste the command from the generated guide!
 
 ## 🧪 Testing
 
+### **Quick Verification**
+```bash
+# Run automated infrastructure verification
+./scripts/verify-infrastructure.sh
+
+# Includes checks for:
+# - VPC and networking
+# - CICD instances
+# - EKS cluster
+# - DNS zones and records
+# - Certificates
+```
+
+### **Manual Testing**
 ```bash
 # Check if controllers are running
 kubectl get deployment -n kube-system aws-load-balancer-controller
@@ -82,6 +113,14 @@ kubectl get ingress -w
 
 # Test access
 curl https://app.dev.r53.infinity.ortflix.uk
+```
+
+### **Private DNS Resolution**
+```bash
+# Test from within EKS
+kubectl run test --image=busybox --rm -it -- nslookup gitlab-server.vpc.internal
+
+# Should resolve to GitLab private IP (10.10.11.X)
 ```
 
 ---

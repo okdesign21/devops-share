@@ -3,7 +3,10 @@ set -euo pipefail
 
 # Wait for Jenkins to write the agent secret to the HTTP endpoint
 echo "Waiting for Jenkins to publish agent secret..."
-JENKINS_HOST="jenkins-server.vpc.internal"
+
+# Derive the Jenkins host from the provided jenkins_url so we don't rely on a hardcoded hostname
+JENKINS_URL_INPUT="${jenkins_url}"
+JENKINS_HOST="$(echo "$JENKINS_URL_INPUT" | sed -E 's#^https?://([^/:]+).*#\1#')"
 SECRET_URL="http://$JENKINS_HOST:8081/docker-secret.txt"
 MAX_RETRIES=60
 RETRY_COUNT=0

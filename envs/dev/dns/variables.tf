@@ -26,6 +26,7 @@ variable "zone_name" {
 variable "cloudflare_api_token" {
   type        = string
   description = "Cloudflare API token"
+  sensitive   = true
 }
 
 variable "project_name" {

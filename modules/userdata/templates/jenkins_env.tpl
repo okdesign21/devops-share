@@ -11,6 +11,12 @@ EOF
 chown root:root /opt/jenkins/.env || true
 chmod 640 /opt/jenkins/.env || true
 
+# Configure kubeconfig for jenkins user to access EKS
+mkdir -p /home/ubuntu/.kube
+aws eks update-kubeconfig --region ${aws_region} --name ${eks_cluster_name} --kubeconfig /home/ubuntu/.kube/config
+chown -R ubuntu:ubuntu /home/ubuntu/.kube
+chmod 600 /home/ubuntu/.kube/config
+
 # Create Jenkins Configuration as Code directory and config
 mkdir -p /opt/jenkins/config/casc
 mkdir -p /opt/jenkins/config/init.groovy.d

@@ -39,6 +39,19 @@ services:
         gitlab_rails['allow_local_requests_from_web_hooks_and_services'] = true
         gitlab_rails['allow_local_requests_from_system_hooks'] = true
 
+        # Database connection pool and timeout settings
+        gitlab_rails['db_pool'] = 10
+        gitlab_rails['db_connect_timeout'] = 10
+        gitlab_rails['db_keepalives'] = 1
+        gitlab_rails['db_keepalives_idle'] = 30
+        gitlab_rails['db_keepalives_interval'] = 10
+        gitlab_rails['db_keepalives_count'] = 3
+
+        # Redis settings for better token handling
+        gitlab_rails['redis_enable_client'] = true
+        redis['maxmemory'] = '256mb'
+        redis['maxmemory_policy'] = 'allkeys-lru'
+
     logging:
       driver: "local"
       options:

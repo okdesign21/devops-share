@@ -177,18 +177,20 @@ SANs:
 1. Network Stack (VPC, subnets, NAT, SSM)
    cd envs/dev/network && terraform apply
 
-2. CICD Stack (GitLab, Jenkins instances)
-   cd envs/dev/cicd && terraform apply
-
-3. EKS Stack (cluster, nodes, IRSA roles)
+2. EKS Stack (cluster, nodes, IRSA roles)
    cd envs/dev/eks && terraform apply
+   # Requires: Network stack for VPC/subnets
+
+3. CICD Stack (GitLab, Jenkins instances)
+   cd envs/dev/cicd && terraform apply
+   # Requires: Network for VPC/subnets, EKS for cluster name (kubeconfig setup)
 
 4. DNS Stack (Route53 zones, certificates, private DNS, ExternalDNS IRSA)
    cd envs/dev/dns && terraform apply
    # Requires: EKS OIDC provider for ExternalDNS IRSA trust policy
 ```
 
-**Note**: Order is critical - CICD must come before EKS, and DNS must come last.
+**Note**: Order is critical - EKS must come before CICD (Jenkins needs cluster name for kubeconfig), and DNS must come last.
 
 ### **Application Deployment (ArgoCD)**
 ```yaml

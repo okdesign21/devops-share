@@ -7,6 +7,15 @@ data "terraform_remote_state" "network" {
   }
 }
 
+data "terraform_remote_state" "eks" {
+  backend = "s3"
+  config = {
+    bucket = var.state_bucket
+    key    = "${var.project_name}/${var.env}/eks/terraform.tfstate"
+    region = var.region
+  }
+}
+
 # caller identity so tag lookups can default to your account when ami_owner_ids is empty
 data "aws_caller_identity" "me" {}
 
@@ -132,12 +141,15 @@ resource "aws_security_group" "sg_jenkins_agt" {
 module "ud_jenkins_server" {
   source = "../../../modules/userdata"
   scripts = [
+    "${path.module}/../../../modules/userdata/common/kubectl.sh",
     "${path.module}/../../../modules/userdata/compose/jenkins_server.sh",
     templatefile("../../../modules/userdata/templates/jenkins_env.tpl", {
-      public_hostname = "jenkins-server.vpc.internal" # Internal FQDN
-      jenkins_url     = local.jenkins_self_url        # http://localhost:8080 (self)
-      gitlab_url      = local.gitlab_for_jenkins      # http://gitlab-server.vpc.internal (cross-service)
-      agent_override  = "jenkins-server.vpc.internal" # Internal FQDN
+      public_hostname  = "jenkins-server.vpc.internal" # Internal FQDN
+      jenkins_url      = local.jenkins_self_url        # http://localhost:8080 (self)
+      gitlab_url       = local.gitlab_for_jenkins      # http://gitlab-server.vpc.internal (cross-service)
+      agent_override   = "jenkins-server.vpc.internal" # Internal FQDN
+      eks_cluster_name = data.terraform_remote_state.eks.outputs.cluster_name
+      aws_region       = var.region
     })
   ]
 }

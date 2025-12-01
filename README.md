@@ -30,10 +30,10 @@ make apply STACK=cicd ENV=dev
 make apply STACK=eks ENV=dev
 make apply STACK=dns ENV=dev
 
-# Generate access guide and SSM aliases
-make access-guide
-make ssm-aliases
-source ~/.ssm-aliases
+# Generate access guide and SSM aliases for dev
+make access-guide ENV=dev
+make ssm-aliases ENV=dev
+source ~/.ssm-aliases-dev
 
 # Verify infrastructure
 ./scripts/verify-infrastructure.sh
@@ -53,25 +53,49 @@ make destroy STACK=network ENV=dev
 
 ## 🏗️ **Stack Overview**
 
-### **1. Network** (`envs/dev/network/`)
+### **Project Structure**
+```
+envs/
+├── _shared/              # Single source of truth for Terraform code
+│   ├── network/         # Network stack configuration
+│   ├── cicd/            # CICD stack configuration
+│   ├── dns/             # DNS stack configuration
+│   └── eks/             # EKS stack configuration
+├── dev/                 # Development environment
+│   ├── network/
+│   │   ├── *.tf -> ../../_shared/network/*.tf  # Symlinks to shared config
+│   │   └── network.auto.tfvars                 # Dev-specific variables
+│   ├── cicd/
+│   ├── dns/
+│   └── eks/
+└── prod/                # Production environment (same structure)
+```
+
+**Key Design:**
+- **Zero code duplication**: All `.tf` files live in `envs/_shared/`
+- **Environment-specific values**: Controlled via `.tfvars` files in each env
+- **Separate state files**: Each env/stack maintains isolated Terraform state
+- **Symlink-based**: Environments use symlinks pointing to shared configurations
+
+### **1. Network** (`envs/_shared/network/`)
 - VPC with public/private subnets
 - Custom NAT instance (cost-optimized)
 - SSM access configuration
 - Security groups
 
-### **2. CICD** (`envs/dev/cicd/`)
+### **2. CICD** (`envs/_shared/cicd/`)
 - GitLab server (version control)
 - Jenkins server (build automation)
 - Jenkins agents (ephemeral builders)
 - SSM-only access (no public IPs)
 
-### **3. DNS** (`envs/dev/dns/`)
+### **3. DNS** (`envs/_shared/dns/`)
 - Route53 public zone (delegated from Cloudflare)
-  - Route53 private zone (`vpc.internal`)
+- Route53 private zone (`vpc.internal`)
 - ACM certificate with DNS validation
 - ExternalDNS IRSA role
 
-### **4. EKS** (`envs/dev/eks/`)
+### **4. EKS** (`envs/_shared/eks/`)
 - EKS cluster with managed node groups
 - AWS Load Balancer Controller IRSA
 - Public API (restricted IPs)
@@ -90,9 +114,13 @@ make destroy STACK=network ENV=dev
 
 ### **Quick Access (Using Aliases)**
 ```bash
-# Generate aliases
-make ssm-aliases
-source ~/.ssm-aliases
+# Generate aliases for specific environment
+make ssm-aliases ENV=dev
+source ~/.ssm-aliases-dev
+
+# Or for production
+make ssm-aliases ENV=prod
+source ~/.ssm-aliases-prod
 
 # Use simple commands
 gitlab-web        # Opens GitLab at http://localhost:8443
@@ -145,52 +173,107 @@ make ssm-aliases            # Generate shell aliases for SSM
 
 ## 🛠️ **Utility Scripts**
 
-Located in `scripts/` directory:
+Located in `scripts/` directory. All scripts support environment parameter (defaults to `dev`).
+
+### **Environment Management**
+- **`create-new-env.sh <env-name> [vpc-cidr]`**: Automatically creates a new environment
+  ```bash
+  ./scripts/create-new-env.sh staging 15.10.0.0/16
+  # Creates complete environment structure with symlinks and .tfvars
+  ```
 
 ### **Access & Setup**
-- **`generate-access-commands.sh`**: Creates comprehensive access guide (INFRASTRUCTURE_ACCESS.md)
-- **`generate-ssm-aliases.sh`**: Generates shell aliases for SSM port-forwarding and sessions
+- **`generate-access-commands.sh [env]`**: Creates comprehensive access guide
   ```bash
-  ./scripts/generate-ssm-aliases.sh
-  source ~/.ssm-aliases
+  ./scripts/generate-access-commands.sh dev
+  # Outputs: INFRASTRUCTURE_ACCESS_dev.md
+  ```
+  
+- **`generate-ssm-aliases.sh [env]`**: Generates shell aliases for SSM
+  ```bash
+  ./scripts/generate-ssm-aliases.sh dev
+  source ~/.ssm-aliases-dev
   gitlab-web  # Quick access to GitLab
   ```
 
 ### **Verification & Monitoring**
-- **`verify-infrastructure.sh`**: Validates all infrastructure components
+- **`verify-infrastructure.sh [env]`**: Validates all infrastructure components
   ```bash
-  ./scripts/verify-infrastructure.sh
+  ./scripts/verify-infrastructure.sh dev
+  ./scripts/verify-infrastructure.sh prod
   # Checks: VPC, NAT, CICD instances, EKS cluster, DNS, certificates
   ```
 
 ### **Maintenance**
-- **`cleanup-jenkins-disk.sh`**: Cleans Jenkins server disk space
-  - Shows current usage
-  - Cleans workspace, logs, and Docker images
-  - Interactive cleanup options
+- **`cleanup-jenkins-disk.sh [env]`**: Cleans Jenkins server disk space
+  ```bash
+  ./scripts/cleanup-jenkins-disk.sh dev
+  # Shows current usage and cleans workspace, logs, Docker images
+  ```
 
-- **`cleanup-jenkins-agent-disk.sh`**: Cleans Jenkins agent disk space
-  - Similar to server cleanup but for agent instances
+- **`cleanup-jenkins-agent-disk.sh [env]`**: Cleans Jenkins agent disk space
+  ```bash
+  ./scripts/cleanup-jenkins-agent-disk.sh dev
+  ```
 
-- **`debug-jenkins-agent.sh`**: Comprehensive Jenkins agent diagnostics
-  - Checks agent connectivity
-  - Validates DNS resolution
-  - Reviews Docker and container status
-  - Analyzes logs
+- **`debug-jenkins-agent.sh [env]`**: Comprehensive Jenkins agent diagnostics
+  ```bash
+  ./scripts/debug-jenkins-agent.sh dev
+  # Checks agent connectivity, DNS resolution, Docker status, and logs
+  ```
 
 ### **AMI Management**
-- **`create-ami-snapshots.sh`**: Creates AMI snapshots of Jenkins/GitLab servers
+- **`create-ami-snapshots.sh [env]`**: Creates AMI snapshots of Jenkins/GitLab servers
   ```bash
-  ./scripts/create-ami-snapshots.sh
+  ./scripts/create-ami-snapshots.sh dev
   # Interactive menu: Jenkins only, GitLab only, or both
-  # Creates tagged AMIs without waiting for availability
+  # Creates tagged AMIs for backup/reuse
   ```
+
+---
+
+## 🌍 **Managing Multiple Environments**
+
+### **Creating a New Environment**
+```bash
+# Quick create with default CIDR
+./scripts/create-new-env.sh staging
+
+# Or specify custom VPC CIDR
+./scripts/create-new-env.sh staging 15.10.0.0/16
+```
+
+This automatically:
+- Creates directory structure with symlinks
+- Copies and customizes `.tfvars` from dev
+- Sets up proper environment variables
+
+### **Deploying a New Environment**
+```bash
+# 1. Review and customize variables
+vim envs/staging/network/network.auto.tfvars
+
+# 2. Update Makefile (add staging to STACKS logic)
+
+# 3. Deploy in order
+make init ENV=staging
+make apply STACK=network ENV=staging
+make apply STACK=cicd ENV=staging
+make apply STACK=eks ENV=staging
+make apply STACK=dns ENV=staging
+
+# 4. Generate access tools
+make access-guide ENV=staging
+make ssm-aliases ENV=staging
+source ~/.ssm-aliases-staging
+```
 
 ---
 
 ## 📚 **Documentation**
 
-- **[INFRASTRUCTURE_ACCESS.md](INFRASTRUCTURE_ACCESS.md)**: Complete access guide (auto-generated via `make access-guide`)
+- **[ADDING_NEW_ENV.md](ADDING_NEW_ENV.md)**: Detailed guide for adding new environments
+- **[INFRASTRUCTURE_ACCESS_*.md]**: Access guides per environment (auto-generated)
 - **[ARCHITECTURE.md](ARCHITECTURE.md)**: Detailed architecture overview
 - **[K8S_INTEGRATION.md](K8S_INTEGRATION.md)**: Kubernetes manifests and setup
 - **[Makefile](Makefile)**: Available commands
@@ -199,10 +282,11 @@ Located in `scripts/` directory:
 
 | Script | Purpose | Usage |
 |--------|---------|-------|
-| `generate-access-commands.sh` | Creates access documentation | `make access-guide` |
-| `generate-ssm-aliases.sh` | Creates shell aliases | `make ssm-aliases` then `source ~/.ssm-aliases` |
-| `verify-infrastructure.sh` | Validates all components | `./scripts/verify-infrastructure.sh` |
-| `create-ami-snapshots.sh` | Creates CICD AMI backups | `./scripts/create-ami-snapshots.sh` |
+| `create-new-env.sh` | Create new environment | `./scripts/create-new-env.sh <env> [cidr]` |
+| `generate-access-commands.sh` | Creates access documentation | `make access-guide ENV=<env>` |
+| `generate-ssm-aliases.sh` | Creates shell aliases | `make ssm-aliases ENV=<env>` |
+| `verify-infrastructure.sh` | Validates all components | `./scripts/verify-infrastructure.sh <env>` |
+| `create-ami-snapshots.sh` | Creates CICD AMI backups | `./scripts/create-ami-snapshots.sh <env>` |
 | `cleanup-jenkins-disk.sh` | Cleans Jenkins disk space | `./scripts/cleanup-jenkins-disk.sh` |
 | `cleanup-jenkins-agent-disk.sh` | Cleans agent disk space | `./scripts/cleanup-jenkins-agent-disk.sh` |
 | `debug-jenkins-agent.sh` | Diagnoses agent issues | `./scripts/debug-jenkins-agent.sh` |

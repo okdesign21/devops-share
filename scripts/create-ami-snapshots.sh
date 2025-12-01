@@ -1,6 +1,9 @@
 #!/bin/bash
 set -e
 
+# Environment parameter (default to dev)
+ENV="${1:-dev}"
+
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -18,15 +21,15 @@ section() {
 }
 
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-PROJECT_NAME=$(terraform -chdir=envs/dev/network output -raw vpc_id 2>/dev/null | grep -oE 'vpc-[a-z0-9]+' | head -1 || echo "devops")
+PROJECT_NAME=$(terraform -chdir=envs/$ENV/network output -raw vpc_id 2>/dev/null | grep -oE 'vpc-[a-z0-9]+' | head -1 || echo "devops")
 
-section "AWS AMI Creation Tool"
+section "AWS AMI Creation Tool (Environment: $ENV)"
 
 echo ""
 info "Getting instance information..."
 
-JENKINS_ID=$(terraform -chdir=envs/dev/cicd output -raw jenkins_server_id 2>/dev/null)
-GITLAB_ID=$(terraform -chdir=envs/dev/cicd output -raw gitlab_server_id 2>/dev/null)
+JENKINS_ID=$(terraform -chdir=envs/$ENV/cicd output -raw jenkins_server_id 2>/dev/null)
+GITLAB_ID=$(terraform -chdir=envs/$ENV/cicd output -raw gitlab_server_id 2>/dev/null)
 
 if [ -z "$JENKINS_ID" ]; then
     error "Could not get Jenkins instance ID"

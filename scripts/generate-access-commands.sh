@@ -2,29 +2,30 @@
 set -e
 
 # Generate access commands with actual infrastructure IDs
-OUTPUT_FILE="INFRASTRUCTURE_ACCESS.md"
+ENV="${1:-dev}"  # Default to dev if no argument provided
+OUTPUT_FILE="INFRASTRUCTURE_ACCESS_${ENV}.md"
 
-echo "Generating access commands..."
+echo "Generating access commands for environment: $ENV"
 
 # Get all the IDs and values from Terraform
-GITLAB_ID=$(terraform -chdir=envs/dev/cicd output -raw gitlab_server_id 2>/dev/null)
-JENKINS_ID=$(terraform -chdir=envs/dev/cicd output -raw jenkins_server_id 2>/dev/null)
-NAT_ID=$(terraform -chdir=envs/dev/network output -raw nat_instance_id 2>/dev/null)
-CLUSTER_NAME=$(terraform -chdir=envs/dev/eks output -raw cluster_name 2>/dev/null)
-VPC_ID=$(terraform -chdir=envs/dev/network output -raw vpc_id 2>/dev/null)
-GITLAB_IP=$(terraform -chdir=envs/dev/cicd output -raw gitlab_private_ip 2>/dev/null)
-JENKINS_IP=$(terraform -chdir=envs/dev/cicd output -raw jenkins_private_ip 2>/dev/null)
-NAT_IP=$(terraform -chdir=envs/dev/network output -raw nat_instance_public_ip 2>/dev/null)
-REGION=$(terraform -chdir=envs/dev/eks output -raw kubeconfig_command 2>/dev/null | grep -oP '(?<=--region )\S+' || echo "eu-central-1")
-EXTERNAL_DNS_ROLE=$(terraform -chdir=envs/dev/dns output -raw external_dns_role_arn 2>/dev/null)
-ALB_ROLE=$(terraform -chdir=envs/dev/eks output -raw alb_controller_role_arn 2>/dev/null)
-CERT_ARN=$(terraform -chdir=envs/dev/dns output -raw app_certificate_arn 2>/dev/null)
+GITLAB_ID=$(terraform -chdir=envs/$ENV/cicd output -raw gitlab_server_id 2>/dev/null)
+JENKINS_ID=$(terraform -chdir=envs/$ENV/cicd output -raw jenkins_server_id 2>/dev/null)
+NAT_ID=$(terraform -chdir=envs/$ENV/network output -raw nat_instance_id 2>/dev/null)
+CLUSTER_NAME=$(terraform -chdir=envs/$ENV/eks output -raw cluster_name 2>/dev/null)
+VPC_ID=$(terraform -chdir=envs/$ENV/network output -raw vpc_id 2>/dev/null)
+GITLAB_IP=$(terraform -chdir=envs/$ENV/cicd output -raw gitlab_private_ip 2>/dev/null)
+JENKINS_IP=$(terraform -chdir=envs/$ENV/cicd output -raw jenkins_private_ip 2>/dev/null)
+NAT_IP=$(terraform -chdir=envs/$ENV/network output -raw nat_instance_public_ip 2>/dev/null)
+REGION=$(terraform -chdir=envs/$ENV/eks output -raw kubeconfig_command 2>/dev/null | grep -oP '(?<=--region )\S+' || echo "eu-central-1")
+EXTERNAL_DNS_ROLE=$(terraform -chdir=envs/$ENV/dns output -raw external_dns_role_arn 2>/dev/null)
+ALB_ROLE=$(terraform -chdir=envs/$ENV/eks output -raw alb_controller_role_arn 2>/dev/null)
+CERT_ARN=$(terraform -chdir=envs/$ENV/dns output -raw app_certificate_arn 2>/dev/null)
 
 cat > "$OUTPUT_FILE" << EOF
 # 🔐 Infrastructure Access Guide
 
 **Generated on:** $(date)  
-**Environment:** dev  
+**Environment:** $ENV  
 **Region:** ${REGION}
 
 ---

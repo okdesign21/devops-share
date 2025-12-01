@@ -1,6 +1,9 @@
 #!/bin/bash
 set -e
 
+# Environment parameter (default to dev)
+ENV="${1:-dev}"
+
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -19,7 +22,7 @@ success() { echo -e "${GREEN}✓${NC} $1"; }
 error() { echo -e "${RED}✗${NC} $1"; }
 
 # Get instance IDs
-JENKINS_ID=$(terraform -chdir=envs/dev/cicd output -raw jenkins_server_id 2>/dev/null)
+JENKINS_ID=$(terraform -chdir=envs/$ENV/cicd output -raw jenkins_server_id 2>/dev/null)
 
 if [ -z "$JENKINS_ID" ]; then
     error "Could not get Jenkins server instance ID"
@@ -27,11 +30,11 @@ if [ -z "$JENKINS_ID" ]; then
 fi
 
 # Get first Jenkins agent instance (agents are deployed via for_each)
-JENKINS_AGENT_ID=$(terraform -chdir=envs/dev/cicd output -json jenkins_agent_ids 2>/dev/null | jq -r 'to_entries[0].value' 2>/dev/null)
+JENKINS_AGENT_ID=$(terraform -chdir=envs/$ENV/cicd output -json jenkins_agent_ids 2>/dev/null | jq -r 'to_entries[0].value' 2>/dev/null)
 
 if [ -z "$JENKINS_AGENT_ID" ] || [ "$JENKINS_AGENT_ID" == "null" ]; then
     info "Trying to find Jenkins agent via AWS CLI..."
-    PROJECT_NAME=$(terraform -chdir=envs/dev/cicd output -json 2>/dev/null | jq -r '.jenkins_server_id.value' | grep -oE '^i-[a-z0-9]+' || echo "")
+    PROJECT_NAME=$(terraform -chdir=envs/$ENV/cicd output -json 2>/dev/null | jq -r '.jenkins_server_id.value' | grep -oE '^i-[a-z0-9]+' || echo "")
     JENKINS_AGENT_ID=$(aws ec2 describe-instances \
         --filters "Name=tag:Name,Values=*jenkins-agent*" "Name=instance-state-name,Values=running" \
         --query 'Reservations[0].Instances[0].InstanceId' \
@@ -40,7 +43,7 @@ fi
 
 if [ -z "$JENKINS_AGENT_ID" ] || [ "$JENKINS_AGENT_ID" == "None" ]; then
     error "Could not find Jenkins agent instance ID"
-    error "Make sure the agent is deployed: check envs/dev/cicd/cicd.auto.tfvars for jenkins_agent_count"
+    error "Make sure the agent is deployed: check envs/$ENV/cicd/cicd.auto.tfvars for jenkins_agent_count"
     exit 1
 fi
 
@@ -159,7 +162,7 @@ aws ssm get-command-invocation \
 
 # Check network connectivity
 info "Testing connectivity from agent to server..."
-JENKINS_IP=$(terraform -chdir=envs/dev/cicd output -raw jenkins_private_ip 2>/dev/null)
+JENKINS_IP=$(terraform -chdir=envs/$ENV/cicd output -raw jenkins_private_ip 2>/dev/null)
 CMD_ID=$(aws ssm send-command \
     --instance-ids "$JENKINS_AGENT_ID" \
     --document-name "AWS-RunShellScript" \

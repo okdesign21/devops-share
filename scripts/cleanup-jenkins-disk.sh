@@ -1,6 +1,9 @@
 #!/bin/bash
 set -e
 
+# Environment parameter (default to dev)
+ENV="${1:-dev}"
+
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -11,7 +14,7 @@ info() { echo -e "${YELLOW}ℹ${NC} $1"; }
 success() { echo -e "${GREEN}✓${NC} $1"; }
 error() { echo -e "${RED}✗${NC} $1"; }
 
-JENKINS_ID=$(terraform -chdir=envs/dev/cicd output -raw jenkins_server_id 2>/dev/null)
+JENKINS_ID=$(terraform -chdir=envs/$ENV/cicd output -raw jenkins_server_id 2>/dev/null)
 
 if [ -z "$JENKINS_ID" ]; then
     error "Could not get Jenkins server instance ID"

@@ -1,6 +1,9 @@
 #!/bin/bash
 set -e
 
+# Environment parameter (default to dev)
+ENV="${1:-dev}"
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -9,6 +12,7 @@ NC='\033[0m' # No Color
 
 echo "================================================"
 echo "Infrastructure Verification Script"
+echo "Environment: $ENV"
 echo "================================================"
 echo ""
 
@@ -36,7 +40,7 @@ section() {
 section "1. Network Stack"
 
 info "Checking VPC..."
-VPC_ID=$(terraform -chdir=envs/dev/network output -raw vpc_id 2>/dev/null || echo "")
+VPC_ID=$(terraform -chdir=envs/$ENV/network output -raw vpc_id 2>/dev/null || echo "")
 if [ -n "$VPC_ID" ]; then
     success "VPC exists: $VPC_ID"
 else
@@ -45,8 +49,8 @@ else
 fi
 
 info "Checking NAT instance..."
-NAT_ID=$(terraform -chdir=envs/dev/network output -raw nat_instance_id 2>/dev/null || echo "")
-NAT_IP=$(terraform -chdir=envs/dev/network output -raw nat_instance_public_ip 2>/dev/null || echo "")
+NAT_ID=$(terraform -chdir=envs/$ENV/network output -raw nat_instance_id 2>/dev/null || echo "")
+NAT_IP=$(terraform -chdir=envs/$ENV/network output -raw nat_instance_public_ip 2>/dev/null || echo "")
 if [ -n "$NAT_ID" ] && [ "$NAT_ID" != "null" ]; then
     success "NAT instance: $NAT_ID (Public IP: $NAT_IP)"
     
@@ -64,8 +68,8 @@ fi
 section "2. CICD Stack"
 
 info "Checking GitLab instance..."
-GITLAB_ID=$(terraform -chdir=envs/dev/cicd output -raw gitlab_server_id 2>/dev/null)
-GITLAB_IP=$(terraform -chdir=envs/dev/cicd output -raw gitlab_private_ip 2>/dev/null)
+GITLAB_ID=$(terraform -chdir=envs/$ENV/cicd output -raw gitlab_server_id 2>/dev/null)
+GITLAB_IP=$(terraform -chdir=envs/$ENV/cicd output -raw gitlab_private_ip 2>/dev/null)
 if [ -n "$GITLAB_ID" ]; then
     success "GitLab instance: $GITLAB_ID (Private IP: $GITLAB_IP)"
 else
@@ -81,8 +85,8 @@ else
 fi
 
 info "Checking Jenkins instance..."
-JENKINS_ID=$(terraform -chdir=envs/dev/cicd output -raw jenkins_server_id 2>/dev/null)
-JENKINS_IP=$(terraform -chdir=envs/dev/cicd output -raw jenkins_private_ip 2>/dev/null)
+JENKINS_ID=$(terraform -chdir=envs/$ENV/cicd output -raw jenkins_server_id 2>/dev/null)
+JENKINS_IP=$(terraform -chdir=envs/$ENV/cicd output -raw jenkins_private_ip 2>/dev/null)
 if [ -n "$JENKINS_ID" ]; then
     success "Jenkins instance: $JENKINS_ID (Private IP: $JENKINS_IP)"
 else
@@ -165,7 +169,7 @@ else
 fi
 
 info "Checking ACM certificate..."
-CERT_ARN=$(terraform -chdir=envs/dev/dns output -raw app_certificate_arn 2>/dev/null)
+CERT_ARN=$(terraform -chdir=envs/$ENV/dns output -raw app_certificate_arn 2>/dev/null)
 if [ -n "$CERT_ARN" ]; then
     CERT_STATUS=$(aws acm describe-certificate --certificate-arn "$CERT_ARN" --query 'Certificate.Status' --output text 2>/dev/null)
     if [ "$CERT_STATUS" == "ISSUED" ]; then
@@ -208,8 +212,8 @@ fi
 section "4. EKS Stack"
 
 info "Checking EKS cluster..."
-CLUSTER_NAME=$(terraform -chdir=envs/dev/eks output -raw cluster_name 2>/dev/null)
-REGION=$(terraform -chdir=envs/dev/eks output -raw region 2>/dev/null || echo "eu-central-1")
+CLUSTER_NAME=$(terraform -chdir=envs/$ENV/eks output -raw cluster_name 2>/dev/null)
+REGION=$(terraform -chdir=envs/$ENV/eks output -raw region 2>/dev/null || echo "eu-central-1")
 if [ -n "$CLUSTER_NAME" ]; then
     success "EKS cluster: $CLUSTER_NAME (Region: $REGION)"
     
@@ -336,7 +340,7 @@ if kubectl wait --for=condition=Ready pod/network-test --timeout=180s >/dev/null
     # Test 7: Verify EKS nodes are in private subnets
     echo ""
     info "Test 7: Verifying EKS nodes are in private subnets..."
-    PRIVATE_SUBNETS=$(terraform -chdir=envs/dev/network output -json private_subnet_ids 2>/dev/null | jq -r '.[]' || echo "")
+    PRIVATE_SUBNETS=$(terraform -chdir=envs/$ENV/network output -json private_subnet_ids 2>/dev/null | jq -r '.[]' || echo "")
     INSTANCE_ID=$(kubectl get nodes -o json 2>/dev/null | jq -r '.items[0].spec.providerID' | cut -d'/' -f5 || echo "")
     if [ -n "$INSTANCE_ID" ]; then
         NODE_SUBNET=$(aws ec2 describe-instances --instance-ids "$INSTANCE_ID" --query 'Reservations[0].Instances[0].SubnetId' --output text 2>/dev/null || echo "")
@@ -362,7 +366,7 @@ fi
 section "7. IRSA Verification"
 
 info "Checking ExternalDNS IAM role..."
-EXTERNAL_DNS_ROLE=$(terraform -chdir=envs/dev/dns output -raw external_dns_role_arn 2>/dev/null)
+EXTERNAL_DNS_ROLE=$(terraform -chdir=envs/$ENV/dns output -raw external_dns_role_arn 2>/dev/null)
 if [ -n "$EXTERNAL_DNS_ROLE" ]; then
     success "ExternalDNS role: $EXTERNAL_DNS_ROLE"
 else
@@ -370,7 +374,7 @@ else
 fi
 
 info "Checking ALB Controller IAM role..."
-ALB_ROLE=$(terraform -chdir=envs/dev/eks output -raw alb_controller_role_arn 2>/dev/null)
+ALB_ROLE=$(terraform -chdir=envs/$ENV/eks output -raw alb_controller_role_arn 2>/dev/null)
 if [ -n "$ALB_ROLE" ]; then
     success "ALB Controller role: $ALB_ROLE"
 else

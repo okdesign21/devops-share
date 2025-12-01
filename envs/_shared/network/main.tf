@@ -1,0 +1,244 @@
+data "aws_ssm_parameter" "ubuntu_24" {
+  name = var.ubuntu_ami
+}
+
+# SSM role & instance profile for Session Manager
+resource "aws_iam_role" "ssm_ec2" {
+  name = "${var.project_name}-${var.env}-ssm-ec2-role"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [{
+      Effect    = "Allow",
+      Principal = { Service = "ec2.amazonaws.com" },
+      Action    = "sts:AssumeRole"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "ssm_core" {
+  role       = aws_iam_role.ssm_ec2.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
+
+resource "aws_iam_instance_profile" "ssm" {
+  name = "${var.project_name}-${var.env}-ssm-instance-profile"
+  role = aws_iam_role.ssm_ec2.name
+}
+
+#########################################################
+# SSM Access Control for "Devs" Group
+#########################################################
+
+# Get "Devs" group by name
+data "aws_iam_group" "devs" {
+  group_name = "Devs"
+}
+
+# IAM policy for SSM access to all project instances
+resource "aws_iam_policy" "ssm_access" {
+  name        = "ssm-access-${var.project_name}-${var.env}"
+  description = "Allow SSM access to all project instances for Devs group"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ssm:StartSession"
+        ]
+        Resource = [
+          "arn:aws:ec2:${var.region}:*:instance/*"
+        ]
+        Condition = {
+          StringEquals = {
+            "ssm:resourceTag/Project"     = var.project_name
+            "ssm:resourceTag/Environment" = var.env
+          }
+        }
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "ssm:StartSession"
+        ]
+        Resource = [
+          "arn:aws:ssm:*:*:document/AWS-StartPortForwardingSession"
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "ssm:TerminateSession",
+          "ssm:ResumeSession"
+        ]
+        Resource = [
+          "arn:aws:ssm:*:*:session/$${aws:userid}-*"
+        ]
+      }
+    ]
+  })
+
+  tags = {
+    Name        = "ssm-access-${var.project_name}-${var.env}"
+    Purpose     = "DevOps team SSM access to all instances"
+    Environment = var.env
+    Project     = var.project_name
+    ManagedBy   = "Terraform"
+  }
+}
+
+# Attach SSM policy to "Devs" group
+resource "aws_iam_group_policy_attachment" "devs_ssm_access" {
+  group      = data.aws_iam_group.devs.group_name
+  policy_arn = aws_iam_policy.ssm_access.arn
+}
+
+#########################################################
+# SSM-Only Security Group
+#########################################################
+
+resource "aws_security_group" "ssm_only" {
+  name        = "${var.project_name}-${var.env}-ssm-only-sg"
+  description = "SSM-only access, no inbound internet"
+  vpc_id      = module.vpc.vpc_id
+
+  # Allow inbound traffic from within VPC (for internal services like EKS accessing GitLab/Jenkins)
+  ingress {
+    description = "Allow all traffic from VPC CIDR"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = [local.vpc_cidr]
+  }
+
+  # Allow outbound HTTPS to VPC for AWS API calls
+  egress {
+    description = "HTTPS for AWS APIs and package updates"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # Allow outbound HTTP for package updates
+  egress {
+    description = "HTTP for package updates"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # Allow DNS resolution
+  egress {
+    description = "DNS"
+    from_port   = 53
+    to_port     = 53
+    protocol    = "udp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name        = "${var.project_name}-${var.env}-ssm-only-sg"
+    Purpose     = "SSM-only-access"
+    Environment = var.env
+    Project     = var.project_name
+    ManagedBy   = "Terraform"
+  }
+}
+
+locals {
+  cidr_base = lookup({
+    dev  = 10
+    prod = 20
+  }, var.env, 30) # 30 is default for any other env
+
+  availability_zones = ["${var.region}a", "${var.region}b"]
+  vpc_cidr           = format("%d.10.0.0/16", local.cidr_base)
+  public_cidrs = [
+    format("%d.10.1.0/24", local.cidr_base),
+    format("%d.10.2.0/24", local.cidr_base),
+  ]
+  private_cidrs = [
+    format("%d.10.11.0/24", local.cidr_base),
+    format("%d.10.12.0/24", local.cidr_base),
+  ]
+
+  vpc_vars = <<-EOT
+    #!/usr/bin/env bash
+    export VPC_ID="${module.vpc.vpc_id}"
+    export SUBNET_PUBLIC_A="${local.public_cidrs[0]}"
+    export SUBNET_PUBLIC_B="${local.public_cidrs[1]}"
+    export VPC_CIDR="${local.vpc_cidr}"
+  EOT
+
+  nat_vars = <<-EOT
+    #!/usr/bin/env bash
+    export PRIVATE_CIDRS="${local.vpc_cidr}" 
+  EOT
+}
+
+module "vpc" {
+  source        = "../../../modules/vpc"
+  name          = "${var.project_name}-${var.env}"
+  cidr_block    = local.vpc_cidr
+  azs           = local.availability_zones
+  public_cidrs  = local.public_cidrs
+  private_cidrs = local.private_cidrs
+}
+
+resource "aws_security_group" "nat" {
+  name   = "${var.project_name}-nat-sg"
+  vpc_id = module.vpc.vpc_id
+  ingress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = [local.vpc_cidr]
+  }
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+module "ud_nat" {
+  source = "../../../modules/userdata"
+  scripts = [
+    "${path.module}/../../../modules/userdata/common/ssm.sh",
+    "${path.module}/../../../modules/userdata/common/nat.sh",
+  ]
+  inline_snippets = [local.nat_vars]
+}
+
+module "nat_instance" {
+  source                   = "../../../modules/ec2"
+  name                     = "${var.project_name}-nat"
+  ami_id                   = data.aws_ssm_parameter.ubuntu_24.value
+  subnet_id                = module.vpc.public_subnet_ids[0]
+  sg_ids                   = [aws_security_group.nat.id]
+  key_name                 = local.effective_key_name
+  instance_type            = var.nat_instance_type
+  associate_public_ip      = true
+  user_data                = module.ud_nat.content
+  enable_source_dest_check = false
+  root_volume_size_gb      = var.nat_disk_size_gb
+  iam_instance_profile     = aws_iam_instance_profile.ssm.name
+  project_name             = var.project_name
+  env                      = var.env
+  ssm_access               = "devs" # Allow maintenance access via SSM
+}
+
+resource "aws_route" "private_nat" {
+  for_each = {
+    az1 = module.vpc.private_route_table_ids[0]
+    az2 = module.vpc.private_route_table_ids[1]
+  }
+
+  route_table_id         = each.value
+  destination_cidr_block = "0.0.0.0/0"
+  network_interface_id   = module.nat_instance.primary_network_interface_id
+}

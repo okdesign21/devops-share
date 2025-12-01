@@ -56,9 +56,17 @@ import hudson.model.Computer
 import java.io.File
 
 def agentName = "docker"
-def maxAttempts = 120  // ~10 minutes
+def maxAttempts = 180  // ~15 minutes (increased from 120)
 def attempt = 0
 def secret = null
+
+// Wait for Jenkins to be fully initialized
+while (!Jenkins.instance.isQuietingDown() && Jenkins.instance.getInitLevel() != hudson.init.InitMilestone.COMPLETED) {
+  println "Waiting for Jenkins to complete initialization..."
+  Thread.sleep(2000)
+}
+
+println "Jenkins initialization complete. Looking for agent '$agentName'..."
 
 while (attempt < maxAttempts && (secret == null || secret.trim().isEmpty())) {
   attempt++
@@ -70,14 +78,16 @@ while (attempt < maxAttempts && (secret == null || secret.trim().isEmpty())) {
     }
   }
   println "Waiting for agent 'docker' and its secret (attempt $${attempt}/$${maxAttempts})..."
-  Thread.sleep(5000)
+  Thread.sleep(3000)  // Check every 3 seconds instead of 5
 }
 
 if (secret && !secret.trim().isEmpty()) {
   def secretFile = new File('/var/jenkins_home/agent-secrets/docker-secret.txt')
   secretFile.getParentFile().mkdirs()
   secretFile.text = secret
-  println "Agent 'docker' secret written to: $${secretFile.absolutePath}"
+  secretFile.setReadable(true, false)  // Make readable by all
+  println "✓ Agent 'docker' secret written to: $${secretFile.absolutePath}"
+  println "✓ Secret length: $${secret.length()} characters"
 } else {
   println "WARNING: Agent 'docker' secret not available after waiting. Agent may not be able to connect."
 }

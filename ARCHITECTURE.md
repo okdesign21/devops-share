@@ -8,6 +8,31 @@ Multi-stack AWS infrastructure with Terraform for development and production env
 - **DNS**: Route53 public zone + private zone for internal service discovery
 - **EKS**: Kubernetes cluster with ALB controller & ExternalDNS
 
+### **Code Organization**
+The infrastructure uses a **symlink-based structure** to eliminate code duplication:
+
+```
+envs/
+├── _shared/                    # Single source of truth
+│   ├── network/*.tf           # Shared network configuration
+│   ├── cicd/*.tf              # Shared CICD configuration
+│   ├── dns/*.tf               # Shared DNS configuration
+│   └── eks/*.tf               # Shared EKS configuration
+├── dev/
+│   ├── network/
+│   │   ├── *.tf → ../../_shared/network/*.tf  # Symlinks
+│   │   └── network.auto.tfvars                # Dev-specific values
+│   └── (cicd, dns, eks with same pattern)
+└── prod/
+    └── (same structure as dev)
+```
+
+**Benefits:**
+- ✅ **DRY Principle**: Edit once in `_shared/`, applies to all environments
+- ✅ **Isolated State**: Each env/stack has separate Terraform state files
+- ✅ **Environment Control**: Variables in `.tfvars` customize behavior per env
+- ✅ **Git-Friendly**: Symlinks are tracked and version-controlled
+
 ---
 
 ## 🌐 **Network Architecture**

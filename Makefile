@@ -68,13 +68,13 @@ show:
 
 # Generate access guide with all infrastructure details
 access-guide:
-	@echo "Generating infrastructure access guide..."
-	@./generate-access-commands.sh
+	@echo "Generating infrastructure access guide for $(ENV)..."
+	@./scripts/generate-access-commands.sh $(ENV)
 
 # Generate SSM port-forward aliases
 ssm-aliases:
-	@echo "Generating SSM port-forward aliases..."
-	@./generate-ssm-aliases.sh
+	@echo "Generating SSM port-forward aliases for $(ENV)..."
+	@./scripts/generate-ssm-aliases.sh $(ENV)
 	@echo ""
 	@echo "To activate aliases, run:"
-	@echo "  source ~/.ssm-aliases"
+	@echo "  source ~/.ssm-aliases-$(ENV)"

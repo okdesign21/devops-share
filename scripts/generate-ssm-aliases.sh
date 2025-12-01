@@ -2,18 +2,19 @@
 set -e
 
 # Generate SSM port-forward aliases
-OUTPUT_FILE="$HOME/.ssm-aliases"
+ENV="${1:-dev}"  # Default to dev if no argument provided
+OUTPUT_FILE="$HOME/.ssm-aliases-$ENV"
 
-echo "Generating SSM port-forward aliases..."
+echo "Generating SSM port-forward aliases for environment: $ENV"
 
 # Get instance IDs from Terraform
-GITLAB_ID=$(terraform -chdir=envs/dev/cicd output -raw gitlab_server_id 2>/dev/null)
-JENKINS_ID=$(terraform -chdir=envs/dev/cicd output -raw jenkins_server_id 2>/dev/null)
-NAT_ID=$(terraform -chdir=envs/dev/network output -raw nat_instance_id 2>/dev/null)
+GITLAB_ID=$(terraform -chdir=envs/$ENV/cicd output -raw gitlab_server_id 2>/dev/null)
+JENKINS_ID=$(terraform -chdir=envs/$ENV/cicd output -raw jenkins_server_id 2>/dev/null)
+NAT_ID=$(terraform -chdir=envs/$ENV/network output -raw nat_instance_id 2>/dev/null)
 
 cat > "$OUTPUT_FILE" <<EOF
-# SSM Port-Forward Aliases - Generated on $(date)
-# Add this to your ~/.zshrc or ~/.bashrc: source ~/.ssm-aliases
+# SSM Port-Forward Aliases ($ENV) - Generated on $(date)
+# Add this to your ~/.zshrc or ~/.bashrc: source $OUTPUT_FILE
 
 # GitLab Web UI (http://localhost:8443)
 alias ssm-gitlab='aws ssm start-session --target ${GITLAB_ID} --document-name AWS-StartPortForwardingSession --parameters "{\"portNumber\":[\"80\"],\"localPortNumber\":[\"8443\"]}"'
@@ -48,6 +49,11 @@ echo "  source $OUTPUT_FILE"
 echo ""
 echo "Then reload your shell:"
 echo "  source ~/.zshrc"
+echo ""
+echo "Usage examples:"
+echo "  ./scripts/generate-ssm-aliases.sh         # Generate for dev (default)"
+echo "  ./scripts/generate-ssm-aliases.sh prod    # Generate for prod"
+echo "  ./scripts/generate-ssm-aliases.sh staging # Generate for staging"
 echo ""
 echo "Available aliases:"
 echo "  ssm-gitlab        - Port-forward GitLab web UI to localhost:8443"

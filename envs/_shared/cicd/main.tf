@@ -16,6 +16,12 @@ data "terraform_remote_state" "eks" {
   }
 }
 
+# Check if EKS cluster exists (outputs will be empty if state doesn't exist)
+locals {
+  eks_cluster_name = try(data.terraform_remote_state.eks.outputs.cluster_name, "")
+  has_eks          = local.eks_cluster_name != ""
+}
+
 # caller identity so tag lookups can default to your account when ami_owner_ids is empty
 data "aws_caller_identity" "me" {}
 
@@ -141,6 +147,7 @@ resource "aws_security_group" "sg_jenkins_agt" {
 module "ud_jenkins_server" {
   source = "../../../modules/userdata"
   scripts = [
+    "${path.module}/../../../modules/userdata/common/awscli.sh",
     "${path.module}/../../../modules/userdata/common/kubectl.sh",
     "${path.module}/../../../modules/userdata/compose/jenkins_server.sh",
     templatefile("../../../modules/userdata/templates/jenkins_env.tpl", {
@@ -148,7 +155,7 @@ module "ud_jenkins_server" {
       jenkins_url      = local.jenkins_self_url        # http://jenkins-server.vpc.internal:8080
       gitlab_url       = local.gitlab_for_jenkins      # http://gitlab-server.vpc.internal (cross-service)
       agent_override   = "jenkins-server.vpc.internal" # Internal FQDN
-      eks_cluster_name = data.terraform_remote_state.eks.outputs.cluster_name
+      eks_cluster_name = local.eks_cluster_name         # Empty string if EKS doesn't exist
       aws_region       = var.region
     })
   ]

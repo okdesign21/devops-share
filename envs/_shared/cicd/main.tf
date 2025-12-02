@@ -87,7 +87,7 @@ locals {
   # Localhost communication variables
   # GitLab uses internal DNS for clone URLs (Jenkins/EKS can reach it)
   gitlab_self_url      = "http://gitlab-server.vpc.internal"       # GitLab self-reference (for clone URLs)
-  jenkins_self_url     = "http://localhost:8080"                   # Jenkins self-reference
+  jenkins_self_url     = "http://jenkins-server.vpc.internal:8080" # Jenkins self-reference (internal DNS)
   gitlab_for_jenkins   = "http://gitlab-server.vpc.internal"       # How Jenkins reaches GitLab
   jenkins_for_agents   = "http://jenkins-server.vpc.internal:8080" # How agents reach Jenkins
   gitlab_external_url  = "https://localhost:8443"                  # User access via SSM port-forward
@@ -145,7 +145,7 @@ module "ud_jenkins_server" {
     "${path.module}/../../../modules/userdata/compose/jenkins_server.sh",
     templatefile("../../../modules/userdata/templates/jenkins_env.tpl", {
       public_hostname  = "jenkins-server.vpc.internal" # Internal FQDN
-      jenkins_url      = local.jenkins_self_url        # http://localhost:8080 (self)
+      jenkins_url      = local.jenkins_self_url        # http://jenkins-server.vpc.internal:8080
       gitlab_url       = local.gitlab_for_jenkins      # http://gitlab-server.vpc.internal (cross-service)
       agent_override   = "jenkins-server.vpc.internal" # Internal FQDN
       eks_cluster_name = data.terraform_remote_state.eks.outputs.cluster_name

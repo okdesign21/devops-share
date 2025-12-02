@@ -61,6 +61,11 @@ cat > envs/staging/staging-common.tfvars <<EOF
 project_name = "proj"
 env          = "staging"
 region       = "eu-central-1"
+
+# Infisical settings
+enable_infisical        = true
+infisical_workspace_id  = "f1b25a9d-602f-4116-aaeb-4a5eff72cda2"
+infisical_host          = "https://eu.infisical.com"
 EOF
 
 # Network-specific
@@ -84,7 +89,23 @@ If staging needs a different S3 bucket or path:
 # Or create envs/staging/backend.hcl with custom settings
 ```
 
-### **5. Update Makefile**
+### **5. Configure Infisical Secrets**
+
+**In Infisical Dashboard:**
+1. Create environment: `staging` (if not exists)
+2. Add secrets under paths:
+   - `/jenkins` → pipeline secrets (dockerhub, slack_bot, aws_cli_key)
+   - `/weather-app/staging` → app-specific secrets
+   - Root level → `cloudflare_api_token` (for DNS stack)
+
+**Local .env file:**
+```bash
+# Same .env file works for all environments
+# Just ensure INFISICAL_PROJECT_ID matches
+INFISICAL_PROJECT_ID="f1b25a9d-602f-4116-aaeb-4a5eff72cda2"
+```
+
+### **6. Update Makefile**
 ```makefile
 # Add staging to environment list
 STAGING_STACKS := network cicd eks dns
@@ -93,22 +114,39 @@ STACKS := $(if $(filter prod,$(ENV)),$(PROD_STACKS),\
           $(DEV_STACKS)))
 ```
 
-### **6. Deploy**
+### **7. Deploy**
 ```bash
+# Initialize all stacks
 make init ENV=staging
+
+# Deploy in order
 make apply STACK=network ENV=staging
+make apply STACK=eks ENV=staging      # Creates infisical-credentials secret
 make apply STACK=cicd ENV=staging
-make apply STACK=eks ENV=staging
-make apply STACK=dns ENV=staging
+make apply STACK=dns ENV=staging       # Auto-fetches cloudflare token
 ```
+
+**Note:** EKS stack will create the `infisical-credentials` Kubernetes secret using credentials from `.env` file.
 
 ---
 
 ## **Summary: Steps to Add New Environment**
 1. ✅ Create directory: `envs/<new-env>/{network,cicd,dns,eks}`
 2. ✅ Symlink `.tf` files from `_shared/`
-3. ✅ Create `<env>-common.tfvars` and `*.auto.tfvars` files
-4. ✅ Update Makefile (add env to STACKS logic)
-5. ✅ Run `make init ENV=<new-env>` then deploy
+3. ✅ Create `<env>-common.tfvars` and `*.auto.tfvars` files (include Infisical config)
+4. ✅ Create secrets in Infisical dashboard for new environment
+5. ✅ Update Makefile (add env to STACKS logic)
+6. ✅ Run `make init ENV=<new-env>` then deploy
+7. ✅ EKS stack auto-creates `infisical-credentials` secret from `.env`
 
 **Zero code duplication required!** 🎉
+
+---
+
+## **Secrets Management Notes**
+
+- **Same `.env` file** works for all environments (dev, staging, prod)
+- **Environment-specific secrets** managed in Infisical dashboard
+- **No manual secret creation** needed in Kubernetes
+- **Cloudflare token** auto-fetched by Makefile if Infisical CLI installed
+- **ArgoCD applications** automatically get secrets via ExternalSecret resources

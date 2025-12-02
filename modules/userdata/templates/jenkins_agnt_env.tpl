@@ -48,6 +48,24 @@ fi
 
 echo "Successfully fetched Jenkins agent secret"
 
+# Wait for Jenkins to be ready (HTTP 200/403 on /login)
+ATTEMPTS=0
+MAX_ATTEMPTS=60
+while [ $ATTEMPTS -lt $MAX_ATTEMPTS ]; do
+  STATUS=$(curl -s -o /dev/null -w "%%{http_code}" "$JENKINS_URL/login" || true)
+  if [ "$STATUS" = "200" ] || [ "$STATUS" = "403" ]; then
+    echo "Jenkins is ready (status $STATUS)"
+    break
+  fi
+  ATTEMPTS=$((ATTEMPTS+1))
+  echo "Jenkins not ready yet (status $STATUS), attempt $ATTEMPTS/$MAX_ATTEMPTS..."
+  sleep 5
+done
+
+if [ $ATTEMPTS -ge $MAX_ATTEMPTS ]; then
+  echo "WARNING: Jenkins readiness not confirmed; proceeding anyway."
+fi
+
 # Create .env file
 cat > /opt/jenkins-agent/.env <<EOF
 JENKINS_URL=$JENKINS_URL

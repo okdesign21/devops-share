@@ -310,3 +310,32 @@ resource "null_resource" "update_kubeconfig" {
     aws_eks_node_group.main
   ]
 }
+
+#########################################################
+# Infisical credentials secret for External Secrets Operator
+#########################################################
+
+resource "kubernetes_secret" "infisical_credentials" {
+  count = var.enable_infisical ? 1 : 0
+
+  metadata {
+    name      = "infisical-credentials"
+    namespace = "default"
+    labels = merge(local.tags, {
+      "app.kubernetes.io/managed-by" = "terraform"
+      "secrets.infisical.com/source" = "infisical-credentials"
+    })
+  }
+
+  data = {
+    "client-id"     = var.infisical_client_id
+    "client-secret" = var.infisical_client_secret
+  }
+
+  type = "Opaque"
+
+  depends_on = [
+    aws_eks_cluster.main,
+    aws_eks_node_group.main
+  ]
+}

@@ -7,24 +7,30 @@ Multi-stack AWS infrastructure with Terraform for development and production env
 - **CICD**: GitLab & Jenkins (SSM-only, private DNS)
 - **DNS**: Route53 public zone + private zone for internal service discovery
 - **EKS**: Kubernetes cluster with ALB controller & ExternalDNS
+- **Secrets**: Infisical-based secrets management with External Secrets Operator
 
 ### **Code Organization**
 The infrastructure uses a **symlink-based structure** to eliminate code duplication:
 
 ```
-envs/
-├── _shared/                    # Single source of truth
-│   ├── network/*.tf           # Shared network configuration
-│   ├── cicd/*.tf              # Shared CICD configuration
-│   ├── dns/*.tf               # Shared DNS configuration
-│   └── eks/*.tf               # Shared EKS configuration
-├── dev/
-│   ├── network/
-│   │   ├── *.tf → ../../_shared/network/*.tf  # Symlinks
-│   │   └── network.auto.tfvars                # Dev-specific values
-│   └── (cicd, dns, eks with same pattern)
-└── prod/
-    └── (same structure as dev)
+devops-share/
+├── .env                        # Sensitive credentials (gitignored)
+├── .env.example               # Template for environment variables
+├── envs/
+│   ├── _shared/               # Single source of truth
+│   │   ├── network/*.tf      # Shared network configuration
+│   │   ├── cicd/*.tf         # Shared CICD configuration
+│   │   ├── dns/*.tf          # Shared DNS configuration
+│   │   └── eks/*.tf          # Shared EKS configuration
+│   ├── dev/
+│   │   ├── dev-common.tfvars # Environment config (non-sensitive)
+│   │   ├── network/
+│   │   │   ├── *.tf → ../../_shared/network/*.tf  # Symlinks
+│   │   │   └── network.auto.tfvars                # Dev-specific values
+│   │   └── (cicd, dns, eks with same pattern)
+│   └── prod/
+│       └── (same structure as dev)
+└── Makefile                   # Orchestrates terraform with .env loading
 ```
 
 **Benefits:**
@@ -127,6 +133,192 @@ Records:
 
 ---
 
+## 🔐 **Secrets Management (Infisical + External Secrets Operator)**
+
+### **Architecture Overview**
+```
+.env file (local)
+  ↓ (loaded by Makefile)
+Terraform Variables
+  ↓ (creates K8s secret)
+infisical-credentials secret (EKS)
+  ↓ (referenced by)
+ClusterSecretStore (External Secrets Operator)
+  ↓ (fetches from)
+Infisical API (eu.infisical.com)
+  ↓ (creates)
+ExternalSecret resources
+  ↓ (populate)
+Kubernetes Secrets → Pod Environment Variables
+```
+
+### **Components**
+
+#### **1. Local .env File**
+```bash
+# Infisical Machine Identity credentials
+TF_VAR_infisical_client_id="xxx"
+TF_VAR_infisical_client_secret="xxx"
+
+# Infisical project context
+INFISICAL_PROJECT_ID="f1b25a9d-602f-4116-aaeb-4a5eff72cda2"
+
+# Optional: Override auto-fetch
+# TF_VAR_cloudflare_api_token="xxx"
+```
+
+**Security:**
+- ✅ `.env` is gitignored (never committed)
+- ✅ `.env.example` provides template
+- ✅ `TF_VAR_*` prefix auto-loads into Terraform
+
+#### **2. EKS Bootstrap Secret**
+Terraform creates `infisical-credentials` secret in EKS cluster:
+
+```hcl
+# envs/dev/eks/main.tf
+resource "kubernetes_secret" "infisical_credentials" {
+  count = var.enable_infisical ? 1 : 0
+  
+  metadata {
+    name      = "infisical-credentials"
+    namespace = "default"
+  }
+  
+  data = {
+    "client-id"     = var.infisical_client_id
+    "client-secret" = var.infisical_client_secret
+  }
+}
+```
+
+**Purpose:** Provides authentication for External Secrets Operator to fetch secrets from Infisical.
+
+#### **3. ClusterSecretStore (ArgoCD)**
+```yaml
+# argocd_repo/charts/vendor/infisical-secretstore/
+apiVersion: external-secrets.io/v1beta1
+kind: ClusterSecretStore
+metadata:
+  name: infisical-secret-store
+spec:
+  provider:
+    infisical:
+      auth:
+        universalAuthCredentials:
+          clientId:
+            secretRef:
+              name: infisical-credentials
+              key: client-id
+          clientSecret:
+            secretRef:
+              name: infisical-credentials
+              key: client-secret
+      secretsScope:
+        projectSlug: "project-name"
+```
+
+**Deployment:** ArgoCD ApplicationSet deploys this to all clusters automatically.
+
+#### **4. Application ExternalSecrets**
+Each application defines what secrets it needs:
+
+```yaml
+# argocd_repo/charts/weather-app/templates/external-secret.yaml
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: {{ include "weather-app.fullname" . }}-secret
+spec:
+  secretStoreRef:
+    name: infisical-secret-store
+    kind: ClusterSecretStore
+  target:
+    name: {{ include "weather-app.fullname" . }}-secret
+  dataFrom:
+    - find:
+        path: {{ .Values.externalSecrets.secretPath }}
+        name:
+          regexp: ".*"
+```
+
+**Result:** Kubernetes secret auto-populated from Infisical, mounted to pods.
+
+### **Infisical CLI Integration**
+
+#### **DNS Stack Auto-Fetch**
+The Makefile automatically fetches `cloudflare_api_token` when applying DNS stack:
+
+```makefile
+apply:
+	@for s in $(STACK_LIST) ; do \
+		set -a; [ -f .env ] && . ./.env || true; set +a; \
+		if [ "$$s" = "dns" ] && [ -z "$$TF_VAR_cloudflare_api_token" ]; then \
+		  if command -v infisical >/dev/null 2>&1; then \
+		    export TF_VAR_cloudflare_api_token="$$(infisical get -p "$${INFISICAL_PROJECT_ID}" -e "$(ENV)" cloudflare_api_token --plain)"; \
+		  fi; \
+		fi; \
+		terraform -chdir=envs/$(ENV)/$$s apply -var-file=$(COMMON_VARS) || exit 1; \
+	done
+```
+
+**Workflow:**
+1. Makefile sources `.env` file (loads `INFISICAL_PROJECT_ID`)
+2. If DNS stack + no manual token → run `infisical get`
+3. Token injected as `TF_VAR_cloudflare_api_token` → Terraform uses it
+
+**Install Infisical CLI:**
+```bash
+brew install infisical/get-cli/infisical
+infisical login  # Authenticate
+```
+
+### **Secret Flow for Applications**
+
+#### **Jenkins Pipeline Secrets**
+```yaml
+# ExternalSecret fetches from /jenkins path in Infisical
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: jenkins-pipeline-secrets
+spec:
+  dataFrom:
+    - find:
+        path: /jenkins
+```
+
+**Available to pods as:**
+```yaml
+envFrom:
+  - secretRef:
+      name: jenkins-pipeline-secrets
+```
+
+#### **Weather App Secrets**
+```yaml
+# Fetches from /weather-app/{env} path
+values-backend-dev.yaml:
+  externalSecrets:
+    enabled: true
+    secretPath: /weather-app/dev
+```
+
+**Secrets in Infisical:**
+- `dev` environment: `/weather-app/dev` → `DATABASE_URL`, `API_KEY`
+- `prod` environment: `/weather-app/prod` → different values
+
+### **Security Benefits**
+
+- ✅ **No secrets in Git**: `.env` and Terraform state contain references only
+- ✅ **Centralized management**: All secrets in Infisical dashboard
+- ✅ **Runtime fetching**: Apps fetch secrets at deployment time
+- ✅ **Environment isolation**: Dev/staging/prod secrets separated
+- ✅ **Automatic rotation**: Update in Infisical → ESO syncs to K8s
+- ✅ **Audit trail**: Infisical logs all secret access
+
+---
+
 ## ☸️ **Kubernetes (EKS)**
 
 ### **Cluster Configuration**
@@ -173,24 +365,41 @@ SANs:
 ## 📊 **Deployment Flow**
 
 ### **Infrastructure Deployment Order**
+
+**Prerequisites:**
 ```bash
-1. Network Stack (VPC, subnets, NAT, SSM)
-   cd envs/dev/network && terraform apply
+# 1. Create .env file from template
+cp .env.example .env
+# Edit .env with actual Infisical credentials
 
-2. EKS Stack (cluster, nodes, IRSA roles)
-   cd envs/dev/eks && terraform apply
-   # Requires: Network stack for VPC/subnets
-
-3. CICD Stack (GitLab, Jenkins instances)
-   cd envs/dev/cicd && terraform apply
-   # Requires: Network for VPC/subnets, EKS for cluster name (kubeconfig setup)
-
-4. DNS Stack (Route53 zones, certificates, private DNS, ExternalDNS IRSA)
-   cd envs/dev/dns && terraform apply
-   # Requires: EKS OIDC provider for ExternalDNS IRSA trust policy
+# 2. (Optional) Install Infisical CLI for auto-fetch
+brew install infisical/get-cli/infisical
+infisical login
 ```
 
-**Note**: Order is critical - EKS must come before CICD (Jenkins needs cluster name for kubeconfig), and DNS must come last.
+**Deployment:**
+```bash
+1. Network Stack (VPC, subnets, NAT, SSM)
+   make apply STACK=network ENV=dev
+
+2. EKS Stack (cluster, nodes, IRSA roles, infisical-credentials secret)
+   make apply STACK=eks ENV=dev
+   # Requires: Network stack for VPC/subnets
+   # Creates: infisical-credentials K8s secret for ESO
+
+3. CICD Stack (GitLab, Jenkins instances)
+   make apply STACK=cicd ENV=dev
+   # Requires: Network for VPC/subnets, EKS for cluster name
+
+4. DNS Stack (Route53 zones, certificates, ExternalDNS IRSA)
+   make apply STACK=dns ENV=dev
+   # Requires: EKS OIDC provider for IRSA
+   # Auto-fetches: cloudflare_api_token via Infisical CLI (if installed)
+```
+
+**Note**: 
+- Order is critical - EKS must create `infisical-credentials` before ArgoCD deploys ClusterSecretStore
+- DNS stack auto-fetches Cloudflare token if Infisical CLI is installed, otherwise set `TF_VAR_cloudflare_api_token` in `.env`
 
 ### **Application Deployment (ArgoCD)**
 ```yaml

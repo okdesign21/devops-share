@@ -62,3 +62,36 @@ variable "lab_ip" {
   type        = string
   description = "Lab IP for API access"
 }
+
+# Infisical variables
+variable "infisical_host" {
+  type        = string
+  description = "Infisical API host URL"
+  default     = "https://eu.infisical.com"
+}
+
+variable "infisical_client_id" {
+  type        = string
+  description = "Infisical Machine Identity Client ID"
+  sensitive   = true
+  default     = ""
+}
+
+variable "infisical_client_secret" {
+  type        = string
+  description = "Infisical Machine Identity Client Secret"
+  sensitive   = true
+  default     = ""
+}
+
+variable "infisical_workspace_id" {
+  type        = string
+  description = "Infisical project/workspace ID"
+  default     = ""
+}
+
+variable "enable_infisical" {
+  type        = bool
+  description = "Enable Infisical secret management integration"
+  default     = true
+}

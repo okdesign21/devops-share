@@ -46,7 +46,6 @@ secrets.*
 
 # Misc
 .env
-.env.*
 *.pem
 
 # VSCode

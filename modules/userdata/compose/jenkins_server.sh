@@ -2,6 +2,7 @@
 set -euxo pipefail
 
 mkdir -p /opt/jenkins
+
 cat > /opt/jenkins/docker-compose.yml <<'YML'
 services:
   jenkins:
@@ -59,3 +60,4 @@ services:
         max-file: "2"
 YML
 
+echo "Jenkins docker-compose.yml created successfully"

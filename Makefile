@@ -21,25 +21,44 @@ init:
 	@for s in $(STACK_LIST) ; do \
 		echo "== terraform init $$s (ENV=$(ENV)) =="; \
 		KEY="$(PROJECT_NAME)/$(ENV)/$$s/terraform.tfstate"; \
+		set -a; [ -f .env ] && . ./.env || true; set +a; \
 		terraform -chdir=envs/$(ENV)/$$s init -input=false -reconfigure -backend-config=$(BACKEND_FILE) -backend-config="key=$$KEY" || exit 1; \
 	done
 
 plan:
 	@for s in $(STACK_LIST) ; do \
-		echo "== terraform plan $$s (ENV=$(ENV)) =="; \
-		terraform -chdir=envs/$(ENV)/$$s plan -input=false -lock=true -var-file=$(COMMON_VARS) || exit 1; \
+	echo "== terraform plan $$s (ENV=$(ENV)) =="; \
+	set -a; [ -f .env ] && . ./.env || true; set +a; \
+	if [ "$$s" = "dns" ] && [ -z "$$TF_VAR_cloudflare_api_token" ]; then \
+	  if command -v infisical >/dev/null 2>&1; then \
+	    export TF_VAR_cloudflare_api_token="$$(infisical secrets get cloudflare_api_token --projectId="$${INFISICAL_PROJECT_ID}" --env="$(ENV)" --plain)"; \
+	  fi; \
+	fi; \
+	terraform -chdir=envs/$(ENV)/$$s plan -input=false -lock=true -var-file=$(COMMON_VARS) || exit 1; \
 	done
 
 apply:
 	@for s in $(STACK_LIST) ; do \
-		echo "== terraform apply $$s (ENV=$(ENV)) =="; \
-		terraform -chdir=envs/$(ENV)/$$s apply -input=false -lock=true -auto-approve -var-file=$(COMMON_VARS) || exit 1; \
+	echo "== terraform apply $$s (ENV=$(ENV)) =="; \
+	set -a; [ -f .env ] && . ./.env || true; set +a; \
+	if [ "$$s" = "dns" ] && [ -z "$$TF_VAR_cloudflare_api_token" ]; then \
+	  if command -v infisical >/dev/null 2>&1; then \
+	    export TF_VAR_cloudflare_api_token="$$(infisical secrets get cloudflare_api_token --projectId="$${INFISICAL_PROJECT_ID}" --env="$(ENV)" --plain)"; \
+	  fi; \
+	fi; \
+	terraform -chdir=envs/$(ENV)/$$s apply -input=false -lock=true -auto-approve -var-file=$(COMMON_VARS) || exit 1; \
 	done
 
 destroy:
 	@for s in $(REVERSE_STACKS) ; do \
-		echo "== terraform destroy $$s (ENV=$(ENV)) =="; \
-		terraform -chdir=envs/$(ENV)/$$s destroy -input=false -lock=true -auto-approve -var-file=$(COMMON_VARS) || exit 1; \
+	echo "== terraform destroy $$s (ENV=$(ENV)) =="; \
+	set -a; [ -f .env ] && . ./.env || true; set +a; \
+	if [ "$$s" = "dns" ] && [ -z "$$TF_VAR_cloudflare_api_token" ]; then \
+	  if command -v infisical >/dev/null 2>&1; then \
+	    export TF_VAR_cloudflare_api_token="$$(infisical secrets get cloudflare_api_token --projectId="$${INFISICAL_PROJECT_ID}" --env="$(ENV)" --plain)"; \
+	  fi; \
+	fi; \
+	terraform -chdir=envs/$(ENV)/$$s destroy -input=false -lock=true -auto-approve -var-file=$(COMMON_VARS) || exit 1; \
 	done
 
 output:

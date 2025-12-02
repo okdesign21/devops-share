@@ -39,7 +39,6 @@ USER jenkins
 DOCKER
 
 cat > /opt/jenkins-agent/docker-compose.yml <<'YML'
-version: "3.8"
 services:
   jenkins-agent:
     container_name: jenkins-agent-docker
@@ -63,3 +62,5 @@ services:
 volumes:
   agent_data:
 YML
+
+echo "Jenkins agent docker-compose.yml created successfully"

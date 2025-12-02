@@ -1,0 +1,20 @@
+# Example dev-common.tfvars
+# Copy this to `dev-common.tfvars` or set environment variables before running Terraform.
+
+# Shared variables for all dev stacks
+project_name        = "proj"
+env                 = "dev"
+region              = "eu-central-1"
+state_bucket        = "a-bucket-name-123456"
+
+# DNS / Cloudflare
+base_domain = "subdomain.exemple.com"
+zone_name   = "exemple.com"
+
+# Access control (public API allowances for EKS)
+home_ip = "203.0.113.0/32"   # example placeholder IP
+lab_ip  = "203.0.113.0/32"   # example placeholder IP
+
+# AMI resolution
+# Leave commented to lookup by tag in owner accounts
+# ami_owner_ids = ["123456789012"]

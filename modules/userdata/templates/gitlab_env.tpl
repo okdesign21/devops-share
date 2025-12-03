@@ -48,3 +48,18 @@ else
 fi
 
 echo "✓ GitLab configured with webhook whitelist: ${jenkins_hostname}, ${vpc_cidr}"
+
+# Wait for GitLab to be ready and apply webhook settings to database
+echo "→ Waiting for GitLab to be ready..."
+sleep 20
+
+"$DOCKER_BIN" exec gitlab gitlab-rails runner "
+  whitelist = '${vpc_cidr}'.split(',').map(&:strip) + ['${jenkins_hostname}']
+  settings = Gitlab::CurrentSettings.current_application_settings
+  settings.allow_local_requests_from_web_hooks_and_services = true
+  settings.allow_local_requests_from_system_hooks = true
+  settings.dns_rebinding_protection_enabled = false
+  settings.outbound_local_requests_whitelist = whitelist
+  settings.save!
+  puts '✓ Webhook settings applied'
+" 2>/dev/null && echo "✓ Webhook database settings configured" || echo "⚠ Could not configure webhook settings (run manually if needed)"

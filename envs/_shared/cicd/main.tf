@@ -155,7 +155,7 @@ module "ud_jenkins_server" {
       jenkins_url      = local.jenkins_self_url        # http://jenkins-server.vpc.internal:8080
       gitlab_url       = local.gitlab_for_jenkins      # http://gitlab-server.vpc.internal (cross-service)
       agent_override   = "jenkins-server.vpc.internal" # Internal FQDN
-      eks_cluster_name = local.eks_cluster_name         # Empty string if EKS doesn't exist
+      eks_cluster_name = local.eks_cluster_name        # Empty string if EKS doesn't exist
       aws_region       = var.region
     })
   ]
@@ -185,12 +185,12 @@ module "ud_gitlab" {
   scripts = [
     "${path.module}/../../../modules/userdata/compose/gitlab.sh",
     templatefile("../../../modules/userdata/templates/gitlab_env.tpl", {
-      external_url     = local.gitlab_self_url        # http://localhost (self-reference)
-      trusted_cidrs    = local.gitlab_trusted_cidrs   # Private subnet CIDRs
-      trusted_array    = local.gitlab_trusted_array   # Private subnet array
-      gitlab_host      = "gitlab-server.vpc.internal" # Internal FQDN
+      external_url     = local.gitlab_self_url         # http://localhost (self-reference)
+      trusted_cidrs    = local.gitlab_trusted_cidrs    # Private subnet CIDRs
+      trusted_array    = local.gitlab_trusted_array    # Private subnet array
+      gitlab_host      = "gitlab-server.vpc.internal"  # Internal FQDN
       jenkins_hostname = "jenkins-server.vpc.internal" # For webhook whitelist
-      vpc_cidr         = data.terraform_remote_state.network.outputs.vpc_cidr # For webhook whitelist
+      vpc_cidr         = local.gitlab_trusted_cidrs    # Reuse private subnet CIDRs for webhook whitelist
     })
   ]
 }

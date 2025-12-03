@@ -185,10 +185,12 @@ module "ud_gitlab" {
   scripts = [
     "${path.module}/../../../modules/userdata/compose/gitlab.sh",
     templatefile("../../../modules/userdata/templates/gitlab_env.tpl", {
-      external_url  = local.gitlab_self_url        # http://localhost (self-reference)
-      trusted_cidrs = local.gitlab_trusted_cidrs   # Private subnet CIDRs
-      trusted_array = local.gitlab_trusted_array   # Private subnet array
-      gitlab_host   = "gitlab-server.vpc.internal" # Internal FQDN
+      external_url     = local.gitlab_self_url        # http://localhost (self-reference)
+      trusted_cidrs    = local.gitlab_trusted_cidrs   # Private subnet CIDRs
+      trusted_array    = local.gitlab_trusted_array   # Private subnet array
+      gitlab_host      = "gitlab-server.vpc.internal" # Internal FQDN
+      jenkins_hostname = "jenkins-server.vpc.internal" # For webhook whitelist
+      vpc_cidr         = data.terraform_remote_state.network.outputs.vpc_cidr # For webhook whitelist
     })
   ]
 }

@@ -41,26 +41,71 @@ jenkins:
       allowsSignup: false
   authorizationStrategy:
     loggedInUsersCanDoAnything:
-      allowAnonymousRead: true
+      allowAnonymousRead: false
   
 unclassified:
   location:
     url: "${jenkins_url}"
     adminAddress: "admin@jenkins.local"
 
-# Kubernetes agents configured via plugin, no static nodes needed
+nodes:
+  - permanent:
+      name: "docker"
+      remoteFS: "/home/jenkins/agent"
+      launcher:
+        inbound:
+          webSocket: true
+      numExecutors: 2
+      labelString: "docker linux"
+      mode: EXCLUSIVE
       
 security:
   remotingCLI:
     enabled: false
 CASC
 
-# Create quick startup script (Kubernetes agents don't need static agent secrets)
-cat > /opt/jenkins/config/init.groovy.d/startup-complete.groovy <<'GROOVY'
+# Create init script to export agent secret to a file accessible via HTTP
+cat > /opt/jenkins/config/init.groovy.d/export-agent-secret.groovy <<'GROOVY'
 import jenkins.model.Jenkins
+import hudson.model.Computer
+import java.io.File
 
-println "✓ Jenkins startup complete - using Kubernetes dynamic agents"
-println "✓ Kubernetes plugin will provision agents on-demand"
+def agentName = "docker"
+def maxAttempts = 180  // ~15 minutes (increased from 120)
+def attempt = 0
+def secret = null
+
+// Wait for Jenkins to be fully initialized
+while (!Jenkins.instance.isQuietingDown() && Jenkins.instance.getInitLevel() != hudson.init.InitMilestone.COMPLETED) {
+  println "Waiting for Jenkins to complete initialization..."
+  Thread.sleep(2000)
+}
+
+println "Jenkins initialization complete. Looking for agent '$agentName'..."
+
+while (attempt < maxAttempts && (secret == null || secret.trim().isEmpty())) {
+  attempt++
+  def computer = Jenkins.instance.getComputer(agentName)
+  if (computer != null) {
+    secret = computer.getJnlpMac()
+    if (secret && !secret.trim().isEmpty()) {
+      break
+    }
+  }
+  println "Waiting for agent 'docker' and its secret (attempt $${attempt}/$${maxAttempts})..."
+  Thread.sleep(3000)  // Check every 3 seconds instead of 5
+}
+
+if (secret && !secret.trim().isEmpty()) {
+  def secretFile = new File('/var/jenkins_home/agent-secrets/docker-secret.txt')
+  secretFile.getParentFile().mkdirs()
+  secretFile.text = secret
+  secretFile.setReadable(true, false)  // Make readable by all
+  println "✓ Agent 'docker' secret written to: $${secretFile.absolutePath}"
+  println "✓ Secret length: $${secret.length()} characters"
+} else {
+  println "WARNING: Agent 'docker' secret not available after waiting. Agent may not be able to connect."
+}
 GROOVY
 
 # Create init.groovy.d script to set Jenkins URL (backup method)
@@ -84,8 +129,48 @@ mkdir -p /opt/jenkins/agent-secrets
 chown 1000:1000 /opt/jenkins/agent-secrets
 chmod 755 /opt/jenkins/agent-secrets
 
-# Kubernetes agents are ephemeral - no need for static agent monitoring
-# This file intentionally left minimal for fast startup
+# Create an init script to mark the agent as ONLINE when connected (non-blocking)
+cat > /opt/jenkins/config/init.groovy.d/mark-agent-online.groovy <<'GROOVY'
+import jenkins.model.Jenkins
+import hudson.model.Computer
+import java.io.File
+
+def agentName = "docker"
+
+// Run in background thread so Jenkins startup is not blocked
+Thread.start {
+  def maxAttempts = 120 // ~10 minutes
+  def attempt = 0
+
+  File dir = new File('/var/jenkins_home/agent-secrets')
+  dir.mkdirs()
+  File ready = new File(dir, 'docker-ready')
+  File timeout = new File(dir, 'docker-timeout')
+
+  println "Checking agent '$agentName' status in background (non-blocking)..."
+
+  while (attempt < maxAttempts) {
+    attempt++
+    Computer c = Jenkins.instance.getComputer(agentName)
+    if (c != null && !c.isOffline()) {
+      ready.text = 'online\n'
+      println "Agent '$agentName' is ONLINE. Wrote marker to $${ready.absolutePath}"
+      break
+    }
+    if (attempt % 12 == 0) { // Log every minute
+      println "Still waiting for agent '$agentName' (attempt $${attempt}/$${maxAttempts})..."
+    }
+    Thread.sleep(5000)
+  }
+
+  if (!ready.exists()) {
+    timeout.text = 'timeout\n'
+    println "WARNING: Agent '$agentName' did not become ONLINE within timeout. Wrote $${timeout.absolutePath}"
+  }
+}
+
+println "Agent monitoring started in background. Jenkins will continue startup."
+GROOVY
 
 # Create plugin list
 cat > /opt/jenkins/config/plugins.txt <<'PLUGINS'
@@ -95,7 +180,6 @@ git
 workflow-aggregator
 slack
 credentials
-kubernetes
 PLUGINS
 
 DOCKER_BIN="$(command -v docker)"

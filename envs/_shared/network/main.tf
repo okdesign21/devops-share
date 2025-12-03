@@ -139,6 +139,33 @@ resource "aws_security_group" "ssm_only" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
+  # Allow outbound to Jenkins on port 8080 (for GitLab webhooks)
+  egress {
+    description = "Jenkins server port 8080 for webhooks"
+    from_port   = 8080
+    to_port     = 8080
+    protocol    = "tcp"
+    cidr_blocks = [local.vpc_cidr]
+  }
+
+  # Allow outbound to GitLab on port 80 (for Jenkins to clone repos)
+  egress {
+    description = "GitLab server port 80 for git operations"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = [local.vpc_cidr]
+  }
+
+  # Allow outbound to GitLab SSH on port 2222 (for Jenkins git clone via SSH)
+  egress {
+    description = "GitLab SSH port 2222 for git operations"
+    from_port   = 2222
+    to_port     = 2222
+    protocol    = "tcp"
+    cidr_blocks = [local.vpc_cidr]
+  }
+
   tags = {
     Name        = "${var.project_name}-${var.env}-ssm-only-sg"
     Purpose     = "SSM-only-access"

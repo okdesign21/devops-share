@@ -39,6 +39,12 @@ services:
         gitlab_rails['allow_local_requests_from_web_hooks_and_services'] = true
         gitlab_rails['allow_local_requests_from_system_hooks'] = true
 
+        # Webhook whitelist for internal services (Jenkins, VPC)
+        whitelist = (ENV['GITLAB_WEBHOOK_WHITELIST'] || '').split(',').map(&:strip).reject(&:empty?)
+        gitlab_rails['outbound_local_requests_whitelist'] = whitelist unless whitelist.empty?
+        gitlab_rails['dns_rebinding_protection_enabled'] = false
+        gitlab_rails['webhook_timeout'] = 10
+
         # Database connection pool and timeout settings
         gitlab_rails['db_pool'] = 10
         gitlab_rails['db_connect_timeout'] = 10

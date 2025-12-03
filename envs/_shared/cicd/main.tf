@@ -25,6 +25,54 @@ locals {
 # caller identity so tag lookups can default to your account when ami_owner_ids is empty
 data "aws_caller_identity" "me" {}
 
+#########################################################
+# Jenkins IAM Role with EKS Access
+#########################################################
+
+resource "aws_iam_role" "jenkins" {
+  name = "${var.project_name}-${var.env}-jenkins-role"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [{
+      Effect    = "Allow",
+      Principal = { Service = "ec2.amazonaws.com" },
+      Action    = "sts:AssumeRole"
+    }]
+  })
+}
+
+# Attach SSM policy to Jenkins role
+resource "aws_iam_role_policy_attachment" "jenkins_ssm" {
+  role       = aws_iam_role.jenkins.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
+
+# EKS access for Jenkins to manage Kubernetes agents
+resource "aws_iam_role_policy" "jenkins_eks" {
+  name = "${var.project_name}-${var.env}-jenkins-eks-access"
+  role = aws_iam_role.jenkins.name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "eks:DescribeCluster",
+          "eks:ListClusters"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+# Jenkins instance profile
+resource "aws_iam_instance_profile" "jenkins" {
+  name = "${var.project_name}-${var.env}-jenkins-instance-profile"
+  role = aws_iam_role.jenkins.name
+}
+
 # Jenkins/GitLab tag-based lookups (only used when explicit AMI var empty)
 data "aws_ami" "jenkins_lookup" {
   count       = var.jenkins_server_ami == "" ? 1 : 0
@@ -109,9 +157,10 @@ locals {
     local.gitlab_trusted_cidrs != "" ? format("['%s']", join("','", split(",", local.gitlab_trusted_cidrs))) : "[]"
   )
 
-  inst_subnets = tolist(data.terraform_remote_state.network.outputs.public_subnet_ids)
-  vpc_id       = data.terraform_remote_state.network.outputs.vpc_id
-  ssm_profile  = data.terraform_remote_state.network.outputs.ssm_instance_profile_name
+  inst_subnets    = tolist(data.terraform_remote_state.network.outputs.public_subnet_ids)
+  vpc_id          = data.terraform_remote_state.network.outputs.vpc_id
+  ssm_profile     = data.terraform_remote_state.network.outputs.ssm_instance_profile_name
+  jenkins_profile = aws_iam_instance_profile.jenkins.name
 
   tags = {
     Environment = var.env
@@ -171,7 +220,7 @@ module "jenkins_server" {
   instance_type        = var.jenkins_server_instance_type
   root_volume_size_gb  = var.jenkins_server_volume_size_gb
   associate_public_ip  = false
-  iam_instance_profile = local.ssm_profile
+  iam_instance_profile = local.jenkins_profile
   project_name         = var.project_name
   env                  = var.env
   ssm_access           = "devs" # Allow "Devs" group SSM access

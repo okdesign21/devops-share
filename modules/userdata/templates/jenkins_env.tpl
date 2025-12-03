@@ -32,8 +32,48 @@ mkdir -p /opt/jenkins/config/init.groovy.d
 
 # Create JCasC configuration file
 if [ -n "${eks_cluster_name}" ]; then
-  # EKS exists - include Kubernetes cloud configuration
-  cat > /opt/jenkins/config/casc/jenkins.yaml <<'CASC'
+  # EKS exists - get cluster endpoint and CA cert
+  echo "Fetching EKS cluster details for: ${eks_cluster_name}"
+  
+  EKS_ENDPOINT=$(aws eks describe-cluster --region ${aws_region} --name ${eks_cluster_name} --query 'cluster.endpoint' --output text)
+  EKS_CA_DATA=$(aws eks describe-cluster --region ${aws_region} --name ${eks_cluster_name} --query 'cluster.certificateAuthority.data' --output text)
+  
+  # Create kubeconfig for Jenkins to access EKS
+  mkdir -p /opt/jenkins/.kube
+  cat > /opt/jenkins/.kube/config <<KUBECONFIG
+apiVersion: v1
+kind: Config
+clusters:
+- cluster:
+    certificate-authority-data: $${EKS_CA_DATA}
+    server: $${EKS_ENDPOINT}
+  name: ${eks_cluster_name}
+contexts:
+- context:
+    cluster: ${eks_cluster_name}
+    user: jenkins
+  name: jenkins@${eks_cluster_name}
+current-context: jenkins@${eks_cluster_name}
+users:
+- name: jenkins
+  user:
+    exec:
+      apiVersion: client.authentication.k8s.io/v1beta1
+      command: aws
+      args:
+        - eks
+        - get-token
+        - --cluster-name
+        - ${eks_cluster_name}
+        - --region
+        - ${aws_region}
+KUBECONFIG
+
+  chown -R 1000:1000 /opt/jenkins/.kube
+  chmod 600 /opt/jenkins/.kube/config
+  
+  # EKS exists - include Kubernetes cloud configuration with external endpoint
+  cat > /opt/jenkins/config/casc/jenkins.yaml <<CASC
 jenkins:
   systemMessage: "Jenkins configured automatically via JCasC"
   numExecutors: 0
@@ -54,8 +94,9 @@ unclassified:
     adminAddress: "admin@jenkins.local"
   kubernetesCloud:
     - name: "kubernetes"
-      serverUrl: "https://kubernetes.default"
-      skipTlsVerify: true
+      serverUrl: "$${EKS_ENDPOINT}"
+      serverCertificate: "$${EKS_CA_DATA}"
+      skipTlsVerify: false
       namespace: "jenkins-agents"
       jenkinsUrl: "${jenkins_url}"
       jenkinsTunnel: "${public_hostname}:50000"
@@ -170,12 +211,12 @@ Jenkins.instance.getItemMap().values().each { item ->
                 item.addTrigger(trigger)
                 item.save()
                 
-                println "✓ Configured webhook trigger for '${jobName}' with token: ${token}"
+                println "✓ Configured webhook trigger for '$${jobName}' with token: $${token}"
             } catch (Exception e) {
-                println "⚠ Failed to configure webhook for '${jobName}': ${e.message}"
+                println "⚠ Failed to configure webhook for '$${jobName}': $${e.message}"
             }
         } else {
-            println "✓ Webhook trigger already configured for '${jobName}'"
+            println "✓ Webhook trigger already configured for '$${jobName}'"
         }
     }
 }

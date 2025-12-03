@@ -100,8 +100,9 @@ envs/
 
 ### **2. CICD** (`envs/_shared/cicd/`)
 - GitLab server (version control)
-- Jenkins server (build automation)
-- Jenkins agents (ephemeral builders)
+- Jenkins server (build automation with EKS access)
+- Jenkins agents (Kubernetes pods in EKS cluster)
+- Jenkins-specific IAM role with EKS permissions
 - SSM-only access (no public IPs)
 
 ### **3. DNS** (`envs/_shared/dns/`)

@@ -70,7 +70,7 @@ Private Subnets (10.10.11.0/24, 10.10.12.0/24):
 ### **Services**
 - **GitLab**: Version control, CI/CD pipelines (Docker Compose)
 - **Jenkins**: Build automation, deployment orchestration (Docker Compose)
-- **Jenkins Agents**: Ephemeral build executors (auto-registered via JCasC)
+- **Jenkins Agents**: Kubernetes pods in EKS cluster (ephemeral, auto-provisioned)
 
 ### **Auto-Configuration Features**
 - **Jenkins URL**: Automatically set via JCasC to `http://jenkins-server.vpc.internal:8080`
@@ -95,15 +95,15 @@ jenkins-web       # Opens Jenkins at http://localhost:8080
 - **GitLab self-reference**: `http://localhost` (container → localhost)
 - **Jenkins self-reference**: `http://localhost:8080` (container → localhost)
 - **Jenkins → GitLab**: `http://gitlab-server.vpc.internal` (via private DNS)
-- **Jenkins ← Agents**: `http://jenkins-server.vpc.internal:8080` (via private DNS)
-- **Agent Secret Exchange**: `http://jenkins-server.vpc.internal:8081/docker-secret.txt` (via nginx sidecar)
+- **Jenkins → EKS API**: External EKS endpoint (authenticated via IAM role)
+- **Jenkins ← K8s Agents**: Pods connect to `jenkins-server.vpc.internal:8080`
 
-### **Jenkins Agent Auto-Registration Flow**
-1. Jenkins server starts → JCasC creates agent node named "docker"
-2. Groovy init script extracts agent secret → writes to `/var/jenkins_home/agent-secrets/docker-secret.txt`
-3. Nginx sidecar container serves secrets directory on port 8081
-4. Agent EC2 instance fetches secret from `http://jenkins-server.vpc.internal:8081/docker-secret.txt`
-5. Agent connects automatically using WebSocket protocol
+### **Jenkins Kubernetes Agents Flow**
+1. Jenkins server starts with EKS-enabled IAM role
+2. JCasC configures Kubernetes cloud with EKS endpoint
+3. Pipeline triggers → Jenkins creates ephemeral pod in `jenkins-agents` namespace
+4. Pod runs build → terminates automatically
+5. Service account `jenkins` provides RBAC permissions in cluster
 
 
 ---
@@ -423,6 +423,12 @@ spec:
 - ✅ **IAM integration**: Leverage existing AWS IAM
 - ✅ **Audit trail**: CloudTrail logs all sessions
 - ✅ **Cost savings**: No bastion hosts or VPN
+
+### **Why Jenkins-Specific IAM Role?**
+- ✅ **Least Privilege**: Only Jenkins gets EKS access, not GitLab or other EC2s
+- ✅ **RBAC Separation**: Clear security boundary between services
+- ✅ **Maintainability**: Easy to audit Jenkins-specific permissions
+- ✅ **Scalability**: Can add more granular permissions as needed
 
 ### **Why Custom NAT Instance?**
 - ✅ **Cost**: ~$7/month vs ~$45/month for NAT Gateway

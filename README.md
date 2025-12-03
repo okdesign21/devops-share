@@ -47,6 +47,21 @@ make destroy STACK=dns ENV=dev
 make destroy STACK=eks ENV=dev
 make destroy STACK=cicd ENV=dev
 make destroy STACK=network ENV=dev
+
+# Note: Cleanup script automatically runs after destroy
+# to remove any orphaned IAM resources (roles, instance profiles)
+# that may fail to delete due to AWS eventual consistency
+```
+
+### **Handling Orphaned IAM Resources**
+If you encounter `EntityAlreadyExists` errors after a destroy/recreate cycle:
+```bash
+# The destroy process now automatically cleans up orphaned IAM resources
+# But if you need to manually import them:
+cd envs/dev/eks
+terraform import -var-file=../dev-common.tfvars aws_iam_role.cluster proj-dev-eks-cluster-role
+terraform import -var-file=../dev-common.tfvars aws_iam_role.node proj-dev-eks-node-role
+terraform import -var-file=../dev-common.tfvars aws_iam_instance_profile.node_profile proj-dev-eks-node-profile
 ```
 
 ---
@@ -216,6 +231,13 @@ Located in `scripts/` directory. All scripts support environment parameter (defa
   ./scripts/cleanup-jenkins-agent-disk.sh dev
   ```
 
+- **`cleanup-orphaned-iam.sh [env] [project] [region]`**: Cleans up orphaned IAM resources
+  ```bash
+  ./scripts/cleanup-orphaned-iam.sh dev proj eu-central-1
+  # Removes IAM roles and instance profiles that survive terraform destroy
+  # Automatically called after 'make destroy'
+  ```
+
 - **`debug-jenkins-agent.sh [env]`**: Comprehensive Jenkins agent diagnostics
   ```bash
   ./scripts/debug-jenkins-agent.sh dev
@@ -289,6 +311,7 @@ source ~/.ssm-aliases-staging
 | `create-ami-snapshots.sh` | Creates CICD AMI backups | `./scripts/create-ami-snapshots.sh <env>` |
 | `cleanup-jenkins-disk.sh` | Cleans Jenkins disk space | `./scripts/cleanup-jenkins-disk.sh` |
 | `cleanup-jenkins-agent-disk.sh` | Cleans agent disk space | `./scripts/cleanup-jenkins-agent-disk.sh` |
+| `cleanup-orphaned-iam.sh` | Removes orphaned IAM resources | `./scripts/cleanup-orphaned-iam.sh <env>` |
 | `debug-jenkins-agent.sh` | Diagnoses agent issues | `./scripts/debug-jenkins-agent.sh` |
 
 ---

@@ -15,7 +15,7 @@ STACK_LIST     := $(if $(filter all,$(STACK)),$(STACKS),$(STACK))
 # Reverse order for destroy-all
 REVERSE_STACKS := $(if $(filter all,$(STACK)),$(shell echo $(STACKS) | awk '{for(i=NF;i>=1;i--) printf "%s ", $$i}'),$(STACK))
 
-.PHONY: init plan apply destroy output validate fmt show access-guide ssm-aliases
+.PHONY: init plan apply destroy output validate fmt show access-guide ssm-aliases list
 
 init:
 	@for s in $(STACK_LIST) ; do \
@@ -60,6 +60,9 @@ destroy:
 	fi; \
 	terraform -chdir=envs/$(ENV)/$$s destroy -input=false -lock=true -auto-approve -var-file=$(COMMON_VARS) || exit 1; \
 	done
+	@echo ""
+	@echo "🧹 Running IAM cleanup for orphaned resources..."
+	@./scripts/cleanup-orphaned-iam.sh $(ENV) $(PROJECT_NAME)
 
 output:
 	@for s in $(STACK_LIST) ; do \
@@ -71,6 +74,12 @@ validate:
 	@for s in $(STACK_LIST) ; do \
 		echo "== terraform validate $$s (ENV=$(ENV)) =="; \
 		terraform -chdir=envs/$(ENV)/$$s validate || exit 1; \
+	done
+
+list:
+	@for s in $(STACK_LIST) ; do \
+		echo "== terraform list $$s (ENV=$(ENV)) =="; \
+		terraform -chdir=envs/$(ENV)/$$s state list || exit 1; \
 	done
 
 fmt:

@@ -40,5 +40,3 @@ provider "kubernetes" {
     ]
   }
 }
-
-# Infisical provider removed; credentials provided via env + inline secret
